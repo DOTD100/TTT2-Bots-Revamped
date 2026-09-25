@@ -153,7 +153,22 @@ section's verification line is a point-in-time record of the count when that cha
 the empty `validate_result.txt` (deleted) and `lua/tttbots2/plan_summary.md`, which this file supersedes. The
 long-standing "CHANGELOG.md has no entry for any of this" gap is closed by a `v1.4.0 (unreleased)` section
 covering the whole session; checking the notes against the changelog is still the fastest way to see what a
-public reader will and will not learn. `.roo/` itself holds only `mcp.json`.
+public reader will and will not learn.
+
+**Published the same day:** `https://github.com/DOTD100/TTT2-Bots-Revamped` - public, default branch `main`, one
+commit `9e7469f` (234 files, 33,422 insertions), committed as `DOTD100 <DOTD100@users.noreply.github.com>`. Read
+back from the API afterwards: 254 tree entries, and no `.roo/`, `validate_result.txt` or `plan_summary.md` among
+them. The push used `.roo/gh_push.ps1`, which reads the token out of `.roo/mcp.json` at run time and passes it as
+an `http.extraheader`, so no credential is stored in `.git/config` and none sits in the script. The trap worth
+keeping: a fine-grained token that can **create** repositories (Administration: write) does not necessarily have
+**Contents: read and write**, and without that the push is refused with a 403 naming the account that owns the
+token - which reads like a permissions problem with the account rather than with the token. `.roo/` holds
+`mcp.json` plus that one helper; the throwaway scripts this session wrote there were deleted again.
+
+Two things a public reader will now find, worth a decision rather than a change: `README.md` still links the
+**upstream** Steam Workshop item and the upstream author's maps and wiki (correct as attribution under the
+CC BY-SA 4.0 licence this tree ships, and wrong once a revamped build has its own workshop page), and it does not
+say in words that this is a revamped build of somebody's project.
 
 **Debug switches worth knowing while testing:** `ttt_bot_debug_misc` (prints the HuntTarget target claims and
 `Attack.OnEnd` clears from section 20, the role-registration lines from section 27, and the chatter event names),
