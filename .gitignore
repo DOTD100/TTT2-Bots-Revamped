@@ -1,0 +1,18 @@
+# Scratch space and local state. `.roo/mcp.json` is this workspace's MCP configuration and holds a personal
+# access token, so it must never be committed - and neither must anything else the tooling leaves behind.
+.roo/
+
+# An empty artifact left behind by a validation run; the checker writes nothing to disk itself.
+validate_result.txt
+
+# An older planning note for one round of work. Superseded by WORKING_NOTES.md, and stale enough to be
+# misleading on its own.
+lua/tttbots2/plan_summary.md
+
+# Editor and OS cruft.
+.vscode/
+*.psd
+*.vmf
+*.svn*
+Thumbs.db
+desktop.ini
