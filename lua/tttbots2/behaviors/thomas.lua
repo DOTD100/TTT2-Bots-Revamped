@@ -142,7 +142,7 @@ end
 ---@return boolean
 function Thomas.Validate(bot)
     if not TTTBots.Match.IsRoundActive() then return false end
-    if not lib.GetConVarBool("use_thomas") then return false end
+    -- No convar: the gun is a side buyable, so the buyable list is the switch for it.
     if not lib.IsPlayerAlive(bot) then return false end
     if not Thomas.IsAvailable() then return false end
 

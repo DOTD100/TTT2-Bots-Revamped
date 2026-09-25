@@ -99,36 +99,38 @@ addon hands its cans out on a `+use` keypress, which a bot can never send, so th
 pickup instead — the same checks (range, the one-per-player limit, single-use cans) run either way.
 
 A traitor bot carrying the [Fake Soda](https://github.com/mexikoedi/ttt2_fake_soda) decoy uses it where a can
-belongs (`ttt_bot_place_fake_soda`, on by default): on the exact spot it just drank a real can from, or beside
+belongs: on the exact spot it just drank a real can from, or beside
 a real can that is still standing. That addon's weapon defaults to *throwing* the can and only places it after
 a reload toggles the mode, so the bot toggles it, walks within reach of the chosen spot, looks at it and
 places one. A decoy alone in the middle of nowhere convinces nobody. It buys the item only while the map
 actually has a can to sit it beside.
 
-A traitor carrying the [Boom Body](https://github.com/TTT-2/ttt2-wep_boom_body) uses it early in the round
-(`ttt_bot_use_boom_body`, on by default). That weapon builds a fake corpse of a *random* player wherever the
+A traitor carrying the [Boom Body](https://github.com/TTT-2/ttt2-wep_boom_body) uses it early in the round.
+That weapon builds a fake corpse of a *random* player wherever the
 addon decides to put it and then removes itself, so there is nothing for a bot to aim at — the trap is the
 body, and it goes off on whoever searches it. The bot does know better than to search its own.
 
 The [Thomas the Tank Engine](https://github.com/adigram/ttt_adithomas) gun is the opposite case: the weapon
-chooses nothing and the *aim* is the whole decision, so a bot fires it at a remembered enemy
-(`ttt_bot_use_thomas`, on by default). The train drives through walls for fifteen seconds before exploding,
+chooses nothing and the *aim* is the whole decision, so a bot fires it at a remembered enemy.
+The train drives through walls for fifteen seconds before exploding,
 so it will not fire one at a target standing next to it — the blast would take the bot with it — and it will
 not fire one down a line a teammate is standing on, because the train kills whoever it touches.
 
 The [Minethrower](https://github.com/mexikoedi/ttt_ttt2_minethrower) is the one item both sides can buy: a bot
-throws a combine mine at a remembered enemy (`ttt_bot_use_minethrower`, on by default), or, with nothing to
+throws a combine mine at a remembered enemy, or, with nothing to
 throw at, leaves one in a doorway it is standing in and then walks well clear of it — a hopper mine does not
 care whose mine it is.
+
+Four of those items - the decoy can, the Boom Body, the train gun and the Minethrower - have no switch of their
+own, and that is deliberate: they are side purchases, so the buyable list is the switch. Remove the entry in
+`lua/tttbots2/data/sv_buyables_expanded.lua` and bots will not buy it. (A bot that loots one from a body still
+uses it, because there is nothing left to tell it not to.) Super Soda keeps its `ttt_bot_use_soda` because cans
+are map furniture rather than something a bot pays for.
 
 | Cvar | Default | What it does |
 | --- | --- | --- |
 | `ttt_bot_throw_nades` | `1` | Allows bots to throw a grenade they are carrying. |
 | `ttt_bot_use_soda` | `1` | Allows bots to drink Super Soda cans. A no-op without that addon. |
-| `ttt_bot_place_fake_soda` | `1` | Allows a bot to leave a Fake Soda decoy where a real can is or was. A no-op without that addon. |
-| `ttt_bot_use_boom_body` | `1` | Allows a bot carrying the Boom Body to leave a fake corpse trap. A no-op without that addon. |
-| `ttt_bot_use_thomas` | `1` | Allows a bot carrying the Thomas the Tank Engine gun to fire it at a remembered enemy. A no-op without that addon. |
-| `ttt_bot_use_minethrower` | `1` | Allows a bot carrying the Minethrower to throw a mine at a remembered enemy, or place one in a doorway. A no-op without that addon. |
 
 ## For developers
 

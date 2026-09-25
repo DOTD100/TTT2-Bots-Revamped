@@ -180,7 +180,7 @@ end
 ---@return boolean
 function PlaceFakeSoda.Validate(bot)
     if not TTTBots.Match.IsRoundActive() then return false end
-    if not lib.GetConVarBool("place_fake_soda") then return false end
+    -- No convar: the decoy is a side buyable, so the buyable list is the switch for it.
     if not lib.IsPlayerAlive(bot) then return false end
     if not PlaceFakeSoda.IsAvailable() then return false end
     if (bot.fakeSodaCooldown or 0) > CurTime() then return false end

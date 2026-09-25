@@ -89,14 +89,6 @@ bot_sh_cvar("throw_nades", "1",
     "Whether or not bots may throw a grenade they are carrying. Does not stop them buying, receiving or looting one - only the throwing.")
 bot_sh_cvar("use_soda", "1",
     "Whether or not bots may drink Super Soda cans when one is within reach. A no-op when that addon is not installed.")
-bot_sh_cvar("place_fake_soda", "1",
-    "Whether or not a bot carrying the Fake Soda leaves a decoy can next to a real one, or on the spot it just drank a can from. A no-op when that addon is not installed.")
-bot_sh_cvar("use_boom_body", "1",
-    "Whether or not a bot carrying the Boom Body uses it, leaving a fake corpse that explodes on whoever searches it. A no-op when that addon is not installed.")
-bot_sh_cvar("use_thomas", "1",
-    "Whether or not a bot carrying the Thomas the Tank Engine gun fires it at a remembered enemy. It will not aim one at a teammate or right in front of itself. A no-op when that addon is not installed.")
-bot_sh_cvar("use_minethrower", "1",
-    "Whether or not a bot carrying the Minethrower throws a mine at a remembered enemy, or places one in a doorway and then leaves. A no-op when that addon is not installed.")
 bot_sh_cvar("use_ankh", "1",
     "Whether or not bots play the Pharaoh's Ankh: placing the role's own, converting a placed one, carrying its own somewhere safer, and shooting a non-ally's down. A no-op when the Pharaoh/Graverobber addon is not installed.")
 

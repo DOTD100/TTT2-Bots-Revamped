@@ -59,7 +59,7 @@ end
 ---@return boolean
 function BoomBody.Validate(bot)
     if not TTTBots.Match.IsRoundActive() then return false end
-    if not lib.GetConVarBool("use_boom_body") then return false end
+    -- No convar: the Boom Body is a side buyable, so the buyable list is the switch for it.
     if not lib.IsPlayerAlive(bot) then return false end
     if not BoomBody.IsAvailable() then return false end
     if TTTBots.Match.Time() > SETUP_WINDOW then return false end

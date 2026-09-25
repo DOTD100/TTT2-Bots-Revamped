@@ -43,11 +43,14 @@ opening fire the moment a round begins: one shared gate, two clocks, `ttt_bot_at
 allocations and the per-tick world scan), 32 (the Revenant, one role in two states: a hidden innocent while it
 lives, a neutral killer after its revive changes its team), 33 (the Pharaoh and the Graverobber - one role duo
 whose whole mechanic is an item, the first real `+use` hold a bot has ever had, and the dormant door path that
-had to stay dormant because of it) and 34 (the Jester and the Swapper fighting a fight they cannot win in the
-post-round deathmatch, where a second target rule turned out to have none of the first one's guards).
+had to stay dormant because of it), 34 (the Jester and the Swapper fighting a fight they cannot win in the
+post-round deathmatch, where a second target rule turned out to have none of the first one's guards) and 35 (four
+item switches removed, because the item is a side buyable and the buyable list is the switch).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
-`place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
+`rdm_delay` (30), `use_ankh` (33). Four that this session added were removed again (35): the boom body, the train
+gun, the minethrower and the decoy can are side buyables, so the buyable list - not a convar - is the switch for
+them.
 
 **New files:** `behaviors/fusecharge.lua`, `behaviors/placefakesoda.lua`, `behaviors/boombody.lua`,
 `behaviors/thomas.lua`, `behaviors/minethrower.lua`, `behaviors/curseswap.lua` + `roles/cursed.lua` (29),
@@ -617,7 +620,7 @@ The node is the last entry in `_prior.Restore`, deliberately **after** `DrinkSod
 tells this behaviour where a decoy belongs. It pauses the inventory's auto-switch while the decoy is in hand
 (the Jihad bomb's reason - the weapon has to stay out), waits a tick after pressing attack and confirms
 `Clip1` went down, and gives up after 20 s rather than spending the round walking to a can it cannot reach.
-`ttt_bot_place_fake_soda` gates it, and the buyable in
+The buyable in
 [`sv_buyables_expanded.lua`](lua/tttbots2/data/sv_buyables_expanded.lua) only lets a bot pay for the item while
 the map has a can to hide it beside.
 
@@ -639,7 +642,7 @@ So the only real decision is when, and the answer is "while the round is young" 
 because a fake corpse earns its keep while people are still searching bodies rather than shooting each other.
 It sits in the traitor tree right after `PlantBomb` (the same kind of set-up job) and refuses to run with an
 `attackTarget`, since firing it means holding a bundle of C4 instead of a gun for a moment.
-`ttt_bot_use_boom_body` gates it, and the buyable (side purchase, `Priority = 0`, `RandomChance = 2`) only
+The buyable (side purchase, `Priority = 0`, `RandomChance = 2`) only
 exists while the addon does.
 
 **The owner and its own trap:** the addon does tell the owner about their boom bodies - marker vision, plus the
@@ -672,7 +675,7 @@ So the launch is the entire integration, and it falls out of how the thing kills
 It declines to run while the bot has an `attackTarget` - a firefight is over long before a train arrives, and the
 launch means holding a pistol model instead of a gun. That also makes the behaviour's moment: when a target's
 trail goes cold and `attackTarget` is dropped, the remembered position is exactly what it fires at.
-`ttt_bot_use_thomas` gates it, the buyable is a side purchase, and it is deliberately **not** a
+The buyable is a side purchase, and it is deliberately **not** a
 `PrimaryWeapon` - the weapon removes itself when it fires, so a bot should never be holding it instead of a gun.
 
 ### Minethrower - throw one at somebody, or leave one in a doorway and go
@@ -697,8 +700,8 @@ that, so its own owner is exactly as valid a target as anybody else. Both branch
 
 It lives in `_prior.Restore` rather than the traitor tree because the addon sells the weapon to **both** the
 detective and the traitor (`SWEP.CanBuy = { ROLE_DETECTIVE, ROLE_TRAITOR }`) and both of those trees reach that
-group. The buyable mirrors it (`Roles = { "traitor", "detective" }`), `ttt_bot_use_minethrower` gates the
-behaviour, and it is deliberately not a `PrimaryWeapon`: `Primary.Ammo` is "none", so once the two mines are
+group. The buyable mirrors it (`Roles = { "traitor", "detective" }`), and it is deliberately not a
+`PrimaryWeapon`: `Primary.Ammo` is "none", so once the two mines are
 spent the weapon is a brick a bot must not be holding instead of a gun.
 
 **Known limitation, left on purpose:** a bot can still wander back onto a mine it placed earlier, since nothing
@@ -2347,3 +2350,33 @@ fought.
 **Verification:** `node tools/glua-check/check.js` -> **128 files, 0 issues, 2 notes** (both pre-existing).
 GluaLint clean on `behaviors/evade.lua`, and the whole-tree count is unchanged at 174 warning lines - every
 warning reported in the touched files is on a line this section did not write.
+
+---
+
+## 35. Four item cvars removed - the buyable list is the switch
+
+**Request:** "For the thomas, boom body, minethrower, and fake soda, can you just remove the cvar as the user can
+choose to remove it from the buyable list if they don't like it."
+
+**What went:** `ttt_bot_place_fake_soda`, `ttt_bot_use_boom_body`, `ttt_bot_use_thomas` and
+`ttt_bot_use_minethrower` - four definitions in [`sh_cvars.lua`](lua/tttbots2/commands/sh_cvars.lua), and the one
+guard line each of [`placefakesoda.lua`](lua/tttbots2/behaviors/placefakesoda.lua),
+[`boombody.lua`](lua/tttbots2/behaviors/boombody.lua), [`thomas.lua`](lua/tttbots2/behaviors/thomas.lua) and
+[`minethrower.lua`](lua/tttbots2/behaviors/minethrower.lua) carried in its `Validate`. Nothing else read them:
+the buyables in `sv_buyables_expanded.lua` were never gated on them, so the switch's only effect was to stop a
+bot using an item it had already bought or been handed.
+
+**Why that is a simplification rather than a loss of control:** all four are side *purchases*, so a server that
+does not want bots using them removes the buyable - one edit that also stops bots spending credits on it, which
+the convar never did. Super Soda keeps `ttt_bot_use_soda` for the mirror-image reason: its cans are map furniture
+that bots do not buy, so there is no list entry to remove. `ttt_bot_throw_nades` now looks inconsistent, since
+grenades are bought too, and it is left alone only because it was not part of the request; the same argument
+would apply to it.
+
+**One caveat, written down rather than left to be discovered later:** removing the buyable stops bots *buying*
+the item, but a bot that loots one from a body still uses it, because the behaviour has nothing left to consult.
+That is the trade taken here: the switch stopped a bot *acting* on an item, and its replacement stops the bot
+*acquiring* it.
+
+**Also updated:** the four README descriptions, the README cvar table (four rows gone, with a paragraph saying
+where the switch went), and the `v1.4.0` changelog bullets, which had advertised the cvars by name.

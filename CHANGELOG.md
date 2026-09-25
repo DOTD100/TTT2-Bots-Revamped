@@ -13,10 +13,10 @@ verified sources and the traps behind every line below; it is not part of the ad
   safer, and shooting a non-ally's down - behind `ttt_bot_use_ankh`.
 - **TTT2** Bots throw the grenades they are carrying (`ttt_bot_throw_nades`), pulling the pin and *then*
   throwing, the way the weapon is built.
-- **TTT2** Bots drink Super Soda cans (`ttt_bot_use_soda`) and use a Fake Soda decoy where a can belongs
-  (`ttt_bot_place_fake_soda`).
-- **TTT2** Bots use the Boom Body (`ttt_bot_use_boom_body`), the Thomas the Tank Engine gun (`ttt_bot_use_thomas`)
-  and the Minethrower (`ttt_bot_use_minethrower`) when they are carrying one.
+- **TTT2** Bots drink Super Soda cans (`ttt_bot_use_soda`) and use a Fake Soda decoy where a can belongs.
+- **TTT2** Bots use the Boom Body, the Thomas the Tank Engine gun and the Minethrower when they are carrying one.
+  Those three and the decoy can have no switch of their own, deliberately: they are side buyables, so a server
+  that does not want bots using them removes the buyable rather than turning something off.
 - **TTT2** A new plan target, `POPULAR_SNIPERSPOT`, which sends a bot to a perch overlooking a busy area, plus a
   popularity map behind the sniper, hiding and bomb spot categories.
 - **TTT2** Bots work out who killed somebody: they track a loiterer near a body and can act on the killer TTT2

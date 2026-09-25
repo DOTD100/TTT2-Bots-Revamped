@@ -171,7 +171,7 @@ end
 ---@return boolean
 function MineThrower.Validate(bot)
     if not TTTBots.Match.IsRoundActive() then return false end
-    if not lib.GetConVarBool("use_minethrower") then return false end
+    -- No convar: the Minethrower is a buyable on both sides, so the buyable list is the switch for it.
     if not lib.IsPlayerAlive(bot) then return false end
     if not MineThrower.IsAvailable() then return false end
     if (bot.mineCooldown or 0) > CurTime() then return false end
