@@ -43,8 +43,11 @@ opening fire the moment a round begins: one shared gate, two clocks, `ttt_bot_at
 allocations and the per-tick world scan), 32 (the Revenant, one role in two states: a hidden innocent while it
 lives, a neutral killer after its revive changes its team), 33 (the Pharaoh and the Graverobber - one role duo
 whose whole mechanic is an item, the first real `+use` hold a bot has ever had, and the dormant door path that
-had to stay dormant because of it) and 34 (the Jester and the Swapper fighting a fight they cannot win in the
-post-round deathmatch, where a second target rule turned out to have none of the first one's guards).
+had to stay dormant because of it), 34 (the Jester and the Swapper fighting a fight they cannot win in the
+post-round deathmatch, where a second target rule turned out to have none of the first one's guards), 36 (the
+Mesmerist's defibrillator letting the trigger up before the weapon's own revive timer, when releasing the trigger
+is what cancels the revival) and 37 (a NULL attack target reaching the tick's visibility cache and throwing
+"Tried to use a NULL entity!").
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -2332,3 +2335,70 @@ fought.
 **Verification:** `node tools/glua-check/check.js` -> **128 files, 0 issues, 2 notes** (both pre-existing).
 GluaLint clean on `behaviors/evade.lua`, and the whole-tree count is unchanged at 174 warning lines - every
 warning reported in the touched files is on a line this section did not write.
+
+---
+
+## 36. The Mesmerist's defib was letting the trigger up too early - and the release is what cancels the revive
+
+**Report:** "Mesmerist role is not reviving the dead bodies properly, as in they held the attack button a bit too
+short. Perhaps add a few more ticks to it?"
+
+**What the addon actually does** (read from its source, `ZacharyHinds/ttt2-role-mesmerist`, cloned for this):
+
+- `weapon_ttt_mesdefi.lua`'s `SWEP:PrimaryAttack` starts a **timed** revival - `ply:Revive(reviveTime, onRevive,
+  doCheck, true, true)` with `reviveTime = GetConVar("ttt2_mesdefi_revive_time"):GetFloat()`, which is **3 s by
+  default and whose own settings slider goes to 30**.
+- `SWEP:Think` cancels that revival outright if `not owner:KeyDown(IN_ATTACK)`, if the eye trace leaves the body,
+  or if the active weapon is no longer the defib. So a released trigger does not end an attempt, it *kills* one.
+- The charge is spent in `SWEP:FinishRevival`, which the revival's own `doCheck` calls when the timer completes -
+  so "the charge dropped" really does mean "the attempt resolved", which is what this behaviour already watched.
+
+**Two ways the behaviour was the thing killing its own attempt:**
+
+1. **The hold budget was a flat six seconds** (`DEFIB_MAX_TIME`). It is now `getHoldBudget()`: the longer of six
+   seconds and the weapon's own convar plus four seconds of slack. Any server with that slider above six had a
+   bot guaranteed to drop the button mid-revival, which is exactly the report.
+2. **`Defib.IsRevivableBody(rag)` was asked every tick, including while the trigger was down.** It is
+   `lib.IsValidBody`, which means "valid *and still linked to a player*" - so anything that unlinks the corpse
+   during a pending revival reads as "not revivable", the node returns FAILURE, `StopReviving` lets the button up,
+   and the weapon cancels the revival the bot was in the middle of. It is now asked only *before* the hold begins.
+   Whether TTT2 unlinks the corpse while a revival is pending, I did not chase: what is certain is that the check
+   had exactly one way to fail, and that failure path is the cancellation itself.
+
+Also kept, and now with its reason written down: `inventory:PauseAutoSwitch()` and `bot:SetActiveWeapon(defib)`
+every tick while holding, because a weapon switch is the third cancellation path in that Think.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint clean on `behaviors/defib.lua`.
+
+---
+
+## 37. "Tried to use a NULL entity!" once a second - a NULL attack target in the tick's visibility cache
+
+**Report:**
+
+```
+[ttt2bots] addons/ttt2bots/lua/tttbots2/lib/sh_botlib.lua:276: Tried to use a NULL entity!
+  1. unknown - addons/ttt2bots/lua/tttbots2/sh_tttbots2.lua:145
+```
+
+**Reading the trace:** `sh_botlib.lua:276` is `answer = bot:Visible(target)` inside `Lib.SeenThisTick`, and
+`sh_tttbots2.lua:145` is the `ErrorNoHaltWithStack` that runs *after* the tick's `pcall` - so that frame is the
+error handler, not the caller. Line 276 is simply being reached with something that is not an entity.
+
+**Cause:** `Player:Visible(NULL)` throws exactly that message, and NULL is a value this codebase really does pass
+around: `sv_morality.lua` guards `closest ~= NULL` before calling `SetAttackTarget`, so a lookup handing back NULL
+rather than nil is a known shape in this tree. `plyMeta:SetAttackTarget` stored whatever it was given, so a single
+NULL became `bot.attackTarget = NULL`, and every reader of the tick cache then called a method on it. Note this is
+a latent bug the per-tick visibility cache (31) made *loud* rather than a new one: before the cache, the same
+value went into a trace call, which fails the same way but only at the moment it is used.
+
+**Fix, in two places, on purpose:**
+
+- **`plyMeta:SetAttackTarget` normalises** - `if not IsValid(target) then target = nil end` before anything else,
+  which covers every caller at once including one written later that forgets, and keeps the early-out comparison
+  honest.
+- **`Lib.SeenThisTick` refuses to call a method on a non-entity** and answers "no" instead. The setter covers the
+  field; this covers a field some future code assigns directly.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes; GluaLint reports nothing on either changed line (the two
+files' other warnings are the pre-existing ones, 12 in the locomotor and 13 in the shared lib).

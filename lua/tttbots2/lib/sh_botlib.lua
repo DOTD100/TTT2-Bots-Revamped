@@ -257,6 +257,12 @@ end
 ---@return boolean
 ---@realm shared
 function TTTBots.Lib.SeenThisTick(bot, target)
+    -- Answering "no" rather than calling a method on something that is not an entity: `bot:Visible(target)`
+    -- raises "Tried to use a NULL entity!" on the shared NULL userdata, and NULL is a value that reaches here
+    -- (the setter that stores attack targets normalises it, but a field assigned directly would not be).
+    -- Invalid also covers a bot that has been removed, which is the same answer for the same reason.
+    if not (IsValid(bot) and IsValid(target)) then return false end
+
     local tick = TTTBots.TickCounter
     if not tick then return bot:Visible(target) end
 

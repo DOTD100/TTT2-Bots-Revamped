@@ -1970,6 +1970,13 @@ end)
 local plyMeta = FindMetaTable("Player")
 
 function plyMeta:SetAttackTarget(target)
+    -- `NULL` is a value this codebase really passes around: TTT2's own lookups hand it back rather than nil, and
+    -- the disguise scan in the morality component guards `closest ~= NULL` because of it. Nothing here did, so a
+    -- NULL was stored as the target and then read by the tick's visibility cache - `bot:Visible(NULL)` - which
+    -- throws "Tried to use a NULL entity!" once a second for as long as the bot holds it. Normalising here fixes
+    -- every caller at once, including one written later that forgets, and it keeps the comparison below honest.
+    if not IsValid(target) then target = nil end
+
     if self.attackTarget == target then return end
     -- Allies are normally off limits. The post-round deathmatch is a free for all, so there they are not.
     if (IsValid(target) and not TTTBots.Match.IsDeathmatchActive() and TTTBots.Roles.IsAllies(self, target)) then

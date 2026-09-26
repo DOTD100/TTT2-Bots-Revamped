@@ -22,10 +22,35 @@ Defib.DefibReach = 70
 --- TTT2's defibrillator refuses corpses that were killed with a headshot unless this is enabled.
 local REVIVE_BRAINDEAD_CVAR = "ttt_defibrillator_revive_braindead"
 
---- How long we are willing to stand over a corpse holding the trigger. The weapon's own charge
---- (ttt_defibrillator_revive_time, 3 seconds by default) always resolves before this; it exists purely
---- as a safety net for a defibrillator that never fires.
-local DEFIB_MAX_TIME = 6
+--- The convars the two defibrillators use for how long the trigger has to be held.
+---
+--- Both of them start a *timed* revival on the press (`Player:Revive(delay, ...)`) and cancel it outright if the
+--- button is released before the timer is up - the Mesmerist's own Think cancels on `not owner:KeyDown(IN_ATTACK)`,
+--- on the eye trace leaving the body, or on the weapon being holstered - so a bot that lets go early is the
+--- thing killing its own attempt. Both convars default to 3 s; the Mesmerist's own slider goes to 30, which is
+--- why this is read at the point of use rather than assumed.
+local REVIVE_TIME_CVARS = { "ttt_defibrillator_revive_time", "ttt2_mesdefi_revive_time" }
+
+--- The shortest hold we will take, and the slack added to the weapon's own timer.
+local DEFIB_MIN_HOLD = 6
+local DEFIB_HOLD_SLACK = 4
+
+--- How long we are willing to stand over a corpse holding the trigger.
+---
+--- The weapon's own timer always resolves inside this, so the budget is only ever reached by a defibrillator
+--- that never fires at all. It used to be a flat 6 seconds, which is *shorter* than the hold a defibrillator is
+--- configured for above that - and since releasing cancels the revival, that release was the bug (section 36).
+---@return number
+local function getHoldBudget()
+    local longest = 0
+
+    for _, name in ipairs(REVIVE_TIME_CVARS) do
+        local cv = GetConVar(name)
+        if cv then longest = math.max(longest, cv:GetFloat()) end
+    end
+
+    return math.max(DEFIB_MIN_HOLD, longest + DEFIB_HOLD_SLACK)
+end
 
 --- How long we leave a corpse alone after spending a charge on it, so we do not fixate on one body.
 local RETRY_COOLDOWN = 30
@@ -250,6 +275,10 @@ end
 
 --- Drives the defibrillator the way a player would: walk up to the body, crouch over it, then hold the
 --- trigger down and let the weapon run its own charge and its own success roll.
+---
+--- Holding is the mechanic, not politeness: the weapon starts a timed revival on the press and cancels it
+--- outright if the trigger comes back up, so every exit below has to be one the weapon agrees with. Nothing in
+--- here may release the button for a reason the weapon would not act on itself.
 ---@param bot Bot
 function Defib.OnRunning(bot)
     local inventory, loco = bot:BotInventory(), bot:BotLocomotor()
@@ -262,9 +291,19 @@ function Defib.OnRunning(bot)
 
     -- The weapon resolved the attempt and revived them.
     if target:Alive() then return STATUS.SUCCESS end
+
+    local holding = bot.defibStartTime ~= nil
+
+    -- A spent defibrillator is a brick, but only worth giving up on *before* the trigger is down: once it is
+    -- down, the charge dropping means the weapon finished the attempt, which the exit further below reads.
+    if not holding and not Defib.HasCharge(defib) then return STATUS.FAILURE end
+
     if not IsValid(rag) then return STATUS.FAILURE end -- the corpse was taken from us
-    if not Defib.IsRevivableBody(rag) then return STATUS.FAILURE end
-    if not Defib.HasCharge(defib) then return STATUS.FAILURE end
+
+    -- Asked before the hold, never during it. Once the trigger is down the weapon is the authority on the body -
+    -- it cancels its own revival if the body stops qualifying - so a second opinion here can only take the
+    -- button back out of the bot's hands, and releasing is exactly what cancels the attempt.
+    if not holding and not Defib.IsRevivableBody(rag) then return STATUS.FAILURE end
 
     local ragPos = Defib.GetSpinePos(rag)
     loco:LookAt(ragPos)
@@ -297,7 +336,7 @@ function Defib.OnRunning(bot)
     -- The weapon spends its charge the moment it resolves the revive, win or lose.
     local charge = Defib.GetCharge(defib)
     local spent = (charge ~= nil and bot.defibClipAtStart ~= nil and charge < bot.defibClipAtStart)
-    if spent or (bot.defibStartTime + DEFIB_MAX_TIME) < CurTime() then
+    if spent or (bot.defibStartTime + getHoldBudget()) < CurTime() then
         Defib.CooldownCorpse(target)
         Defib.StopReviving(bot, inventory, loco)
         return STATUS.SUCCESS
