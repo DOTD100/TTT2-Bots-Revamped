@@ -42,6 +42,11 @@ verified sources and the traps behind every line below; it is not part of the ad
 - **TTT2** Bots in roles that cannot fight no longer attack during the post-round deathmatch - the Jester, the
   Swapper, and the roles whose addons zero their damage, such as the Beggar and the Collusionist. They hide from
   everybody instead of walking into a fight they cannot win.
+- **TTT2** Defibrillator revives are held for as long as the weapon's own revive timer asks for, instead of a flat
+  six seconds. The defibrillators cancel a revival the moment the trigger is released, so a bot letting go early
+  was killing its own attempt - most visibly the Mesmerist, whose revive timer is a setting that goes up to 30.
+- A `NULL` attack target no longer reaches the per-tick visibility check, which used to throw "Tried to use a NULL
+  entity!" roughly once a second for as long as the bot held it.
 - **TTT2** Bots no longer make gameplay callouts while dead, and no longer plant two C4s in the same spot.
 - **TTT2** Bots no longer freeze at gunshots, or "see through floors" when a shot lands below them.
 - **TTT2** RDM has a minimum time (`ttt_bot_rdm_delay`), and an invalid `ParanoidKiller` suspicion reason was fixed.
