@@ -66,13 +66,25 @@ local function getOthers(bot)
     return others
 end
 
---- Can any of these players see that position? `Player:Visible` takes a position as well as an entity.
+--- Can any of these players see that position?
+---
+--- `TTTBots.Lib.CanSeeArc` with a full arc is this framework's position-based visibility test: the arc half of it
+--- cannot fail at 360 degrees, and what is left is `Player:VisibleVec(pos)`. `Player:Visible` is *not* usable
+--- here - it takes an entity, and a hiding spot is a position - which is what the first version of this file got
+--- wrong: it threw "bad argument #1 to 'Visible' (Entity expected, got userdata)" once a tick for every bot
+--- running it (section 38).
+---
+--- The probe is aimed a body's height above the spot. A nav position sits *on* the floor, and a trace to it ends
+--- in the floor it is standing on, which reads as blocked by anything: the same reason the morality component
+--- aims at `+24` when it asks whether a bot can see somebody.
 ---@param pos Vector
 ---@param others table<Player>
 ---@return boolean
 local function isSeen(pos, others)
+    local probe = pos + Vector(0, 0, 24)
+
     for _, other in ipairs(others) do
-        if other:Visible(pos) then return true end
+        if TTTBots.Lib.CanSeeArc(other, probe, 360) then return true end
     end
 
     return false

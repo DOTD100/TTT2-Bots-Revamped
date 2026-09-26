@@ -46,8 +46,9 @@ whose whole mechanic is an item, the first real `+use` hold a bot has ever had, 
 had to stay dormant because of it), 34 (the Jester and the Swapper fighting a fight they cannot win in the
 post-round deathmatch, where a second target rule turned out to have none of the first one's guards), 36 (the
 Mesmerist's defibrillator letting the trigger up before the weapon's own revive timer, when releasing the trigger
-is what cancels the revival) and 37 (a NULL attack target reaching the tick's visibility cache and throwing
-"Tried to use a NULL entity!").
+is what cancels the revival), 37 (a NULL attack target reaching the tick's visibility cache and throwing
+"Tried to use a NULL entity!") and 38 (the deathmatch hiding node calling `Player:Visible` with a position,
+because a comment above it claimed that was allowed).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -2402,3 +2403,35 @@ value went into a trace call, which fails the same way but only at the moment it
 
 **Verification:** glua-check 128 files, 0 issues, 2 notes; GluaLint reports nothing on either changed line (the two
 files' other warnings are the pre-existing ones, 12 in the locomotor and 13 in the shared lib).
+
+---
+
+## 38. `evade.lua` threw "bad argument #1 to 'Visible' (Entity expected, got userdata)" - a comment that was wrong
+
+**Report:**
+
+```
+[ttt2bots] addons/ttt2bots/lua/tttbots2/behaviors/evade.lua:75: bad argument #1 to 'Visible' (Entity expected, got userdata)
+  1. unknown - addons/ttt2bots/lua/tttbots2/sh_tttbots2.lua:145 (x36)
+```
+
+**Mine, and precisely the mistake rule 5 exists for.** The hiding node asked whether a player could see a hiding
+spot with `other:Visible(pos)` - and `Player:Visible` takes an **entity**. A nav spot is a `Vector`, so every call
+threw, once a tick, for every bot running the node (36 times before anyone looked). The call was justified by a
+comment I had written directly above it without checking: "`Player:Visible` takes a position as well as an entity."
+The wrong comment *was* the bug's whole licence, and the runtime is what caught it - rule 5 one layer up from where
+it usually bites, since this time the false claim was the reason the code existed rather than a note beside it.
+
+**Fix:** use [`TTTBots.Lib.CanSeeArc`](lua/tttbots2/lib/sh_botlib.lua:383), the framework's existing
+position-based visibility test. At a full 360 degree arc its angle check cannot fail, so what is left is
+`Player:VisibleVec(pos)` - the right call for a position, and already the shape the morality component uses when it
+asks whether a bot can see somebody. The probe is aimed a body's height above the spot (`+ Vector(0, 0, 24)`),
+the same offset morality uses, because a trace to a nav point ends *in* the floor it stands on and reads as
+blocked by everything.
+
+**Cost, for the record:** one trace per observer per candidate spot, so a re-pick (12 samples) is at most a couple
+of hundred traces, every two seconds, for the one or two bots that can be non-combatant in a deathmatch. It stops
+at the first observer who can see the spot, which is the common case for a bad spot and the rare case for a good
+one. Both the node's own position check and its spot check go through the same function.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes; GluaLint clean on `behaviors/evade.lua`.
