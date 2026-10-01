@@ -88,6 +88,29 @@ function TTTBots.Lib.GetAlivePlayers()
     return aliveCache
 end
 
+local SODA_CAN_CACHE_TIME = 1
+local sodaCanCache, sodaCanCacheAt = nil, 0
+
+---Every Super Soda can in the world, refreshed at most once a second.
+---
+---`ents.FindByClass` builds a fresh list on every call, and two behaviours ask for this set from their *Validate*,
+---which the tree reaches every tick for every bot: the one that walks to a can and the one that leaves a fake can
+---beside one. The set only changes when somebody drinks a can, so a second of staleness costs nothing (a can that
+---has just been taken is filtered by the `IsValid` check at the call sites) and every bot shares the one list.
+---
+---**Super Soda only.** The Fake Soda addon's own cans are `ent_ttt2_fake_soda_*`, which this pattern does not
+---match - see the clearance test in `behaviors/placefakesoda.lua`, which deliberately does not read this list.
+---@return table<Entity>
+---@realm shared
+function TTTBots.Lib.GetSodaCans()
+    local now = CurTime()
+    if not sodaCanCache or (now - sodaCanCacheAt) >= SODA_CAN_CACHE_TIME then
+        sodaCanCache, sodaCanCacheAt = ents.FindByClass("soda_*"), now
+    end
+
+    return sodaCanCache
+end
+
 local isolationCache = {}
 
 -- Function to update the cache

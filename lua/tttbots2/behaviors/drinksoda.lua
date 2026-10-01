@@ -70,34 +70,18 @@ function DrinkSoda.GetPriority(bot, can)
     return BASE_PRIORITY[can:GetClass()] or 99
 end
 
---- The cans in the world, refreshed at most once a second.
----
---- `FindCan` runs from `Validate`, which is every tick for every bot, and `ents.FindByClass` builds a fresh list
---- on every call - so the whole world was rescanned per bot per tick for a set that only changes when somebody
---- drinks a can. A second of staleness costs nothing (a can that has just been taken is filtered by the
---- `IsValid` check in the loop below), and every bot shares the one list.
-local canCache, canCacheAt = nil, 0
-local CAN_CACHE_TIME = 1
-
----@return table<Entity>
-local function getCans()
-    local now = CurTime()
-    if not canCache or (now - canCacheAt) >= CAN_CACHE_TIME then
-        canCache, canCacheAt = ents.FindByClass("soda_*"), now
-    end
-
-    return canCache
-end
-
 --- The can worth walking to, or nil. Cheapest trip wins unless something is more urgent, which is what the
 --- priority multiplied by the search radius does: a lower priority always beats any distance.
+---
+--- The can list itself is cached one layer down, in [`Lib.GetSodaCans`](lua/tttbots2/lib/sh_botlib.lua), because
+--- `placefakesoda.lua` asks the same question about the same set of entities.
 ---@param bot Bot
 ---@return Entity?
 function DrinkSoda.FindCan(bot)
     local myPos = bot:GetPos()
     local best, bestScore = nil, nil
 
-    for _, can in pairs(getCans()) do
+    for _, can in pairs(lib.GetSodaCans()) do
         if not IsValid(can) then continue end
         -- A single-use can the bot has already had does nothing but make it stand there.
         if can.soda_type == "SINGLEUSE" and bot.HasDrunkSoda and bot:HasDrunkSoda(can:GetClass()) then continue end

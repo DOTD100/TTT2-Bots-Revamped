@@ -33,17 +33,34 @@ function UseHealthStation.ValidateStation(hs)
     return isvalid
 end
 
-function UseHealthStation.GetNearestStation(bot)
-    local stations = ents.FindByClass(UseHealthStation.TargetClass)
-    local validStations = {}
-    for i, v in pairs(stations) do
-        if not UseHealthStation.ValidateStation(v) then
-            continue
+local STATION_CACHE_TIME = 1
+local stationCache, stationCacheAt = nil, 0
+
+--- The stations on the map that still have health in them, refreshed at most once a second.
+---
+--- `ents.FindByClass` builds a fresh list on every call, so scanning here cost every bot a world scan on every pass
+--- through the tree whether or not it was hurt. The set changes only as stations are drained, and holding a
+--- station nobody can use for an extra second is harmless: `OnRunning` re-validates the one it is walking to on
+--- every tick regardless, and drops the behaviour when it is empty.
+---@return table<Entity>
+local function getValidStations()
+    local now = CurTime()
+    if not stationCache or (now - stationCacheAt) >= STATION_CACHE_TIME then
+        local validStations = {}
+        for _, v in ipairs(ents.FindByClass(UseHealthStation.TargetClass)) do
+            if UseHealthStation.ValidateStation(v) then
+                table.insert(validStations, v)
+            end
         end
-        table.insert(validStations, v)
+
+        stationCache, stationCacheAt = validStations, now
     end
 
-    local nearestStation = lib.GetClosest(validStations, bot:GetPos())
+    return stationCache
+end
+
+function UseHealthStation.GetNearestStation(bot)
+    local nearestStation = lib.GetClosest(getValidStations(), bot:GetPos())
     return nearestStation
 end
 
@@ -57,11 +74,19 @@ function UseHealthStation.Validate(bot)
     if bot.attackTarget ~= nil then return false end             --- We are preoccupied with an attacker.
     if not lib.GetConVarBool("use_health") then return false end -- This behavior is disabled per the user's choice.
 
-    local isHurt = UseHealthStation.IsHurt(bot)
-    local hasHealthStation = UseHealthStation.HasHealthStation(bot)
-    local isStationNearby = (bot.targetStation or UseHealthStation.GetNearestStation(bot) ~= nil)
+    -- Ordered so that the scan is the last thing paid for, and only by a bot that has a use for it: carrying a
+    -- station is reason enough on its own (a weapon lookup, not a scan), and a bot at full health has nothing to
+    -- walk to one for. This used to compute the scan *before* the short-circuit below, so every healthy bot on
+    -- the server paid for a world scan on every pass through the tree.
+    if UseHealthStation.HasHealthStation(bot) then return true end
+    if not UseHealthStation.IsHurt(bot) then return false end
 
-    return hasHealthStation or (isHurt and isStationNearby)
+    -- `IsValid` rather than a truthiness test, because this is a *cached* entity: a station that has been removed
+    -- is the NULL entity, which is truthy (section 8). An invalid one is ignored so the nearest is looked up
+    -- again, which is what `OnStart` does with the result anyway.
+    if IsValid(bot.targetStation) then return true end
+
+    return UseHealthStation.GetNearestStation(bot) ~= nil
 end
 
 --- Called when the behavior is started
