@@ -82,7 +82,7 @@ local function findTarget(bot)
 
     for _, ply in ipairs(nonAllies) do
         if not lib.IsPlayerAlive(ply) then continue end
-        if not bot:Visible(ply) then continue end
+        if not lib.CanSeeEntity(bot, ply) then continue end
 
         local dist = bot:GetPos():Distance(ply:GetPos())
         if dist > SEEK_RANGE then continue end
@@ -118,7 +118,7 @@ end
 local function getChasePos(bot, target)
     local memory = bot.components.memory
 
-    if bot:Visible(target) then
+    if lib.CanSeeEntity(bot, target) then
         memory:UpdateKnownPositionFor(target)
         return target:GetPos()
     end
@@ -189,7 +189,7 @@ function Stalk.OnRunning(bot)
     -- Measured to the spot we are actually stabbing at, which is what the weapon's own range check does
     -- with the position its trace ended on.
     local inReach = bot:EyePos():Distance(stabPos) <= KNIFE_RANGE
-    if not (inReach and bot:Visible(target) and isBehind(bot, target)) then
+    if not (inReach and lib.CanSeeEntity(bot, target) and isBehind(bot, target)) then
         -- Not in position yet. Working around to their back rather than at the victim themselves keeps
         -- the bot from walking straight into their face and eating a shotgun for it. Run while doing it:
         -- at walking pace the bot matches the speed of anyone walking away from it and can never close,

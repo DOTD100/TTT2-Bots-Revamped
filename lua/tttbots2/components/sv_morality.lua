@@ -509,7 +509,7 @@ hook.Add("PlayerDeath", "TTTBots.Components.Morality.PlayerDeath", function(vict
     -- necessary one. It only decides whether the killer is marked, though - it must not decide whether
     -- anybody else noticed. Returning here used to skip every witness, so a bot that killed from behind
     -- cover, or with fire or a grenade, was invisible to the whole room no matter who was watching.
-    if victim:GetTeam() == TEAM_INNOCENT and victim:Visible(attacker) then
+    if victim:GetTeam() == TEAM_INNOCENT and lib.CanSeeEntity(victim, attacker) then
         local ttt_bot_cheat_redhanded_time = lib.GetConVarInt("cheat_redhanded_time")
         attacker.redHandedTime = timestamp +
             ttt_bot_cheat_redhanded_time -- Only assign red handed time if it was a direct attack
@@ -793,7 +793,7 @@ hook.Add("PlayerHurt", "TTTBots.Components.Morality.PlayerHurt", function(victim
     if not (IsValid(attacker) and attacker:IsPlayer()) then return end
     if attacker == victim then return end -- our own fire, our own grenade
 
-    if victim:Visible(attacker) then
+    if lib.CanSeeEntity(victim, attacker) then
         -- Direct, witnessed combat: build suspicion for the victim and everyone who can see the attacker.
         local witnesses = lib.GetAllWitnesses(attacker:EyePos(), true)
         table.insert(witnesses, victim)
@@ -867,7 +867,7 @@ function BotMorality.IsPlayerNearUnfoundCorpse(ply, corpses)
         if IsIdentified(corpse) then continue end
         local dist = ply:GetPos():Distance(corpse:GetPos())
         local THRESHOLD = 500
-        if ply:Visible(corpse) and (dist < THRESHOLD) then
+        if lib.CanSeeEntity(ply, corpse) and (dist < THRESHOLD) then
             return corpse
         end
     end

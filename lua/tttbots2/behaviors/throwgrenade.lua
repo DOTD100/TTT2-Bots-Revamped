@@ -90,7 +90,7 @@ function ThrowGrenade.FindTarget(bot)
     if not grenade then return nil end
 
     -- Only ever at an enemy the bot cannot shoot at. A target standing in the open belongs to the gunfight.
-    if bot:Visible(target) then return nil end
+    if lib.CanSeeEntity(bot, target) then return nil end
 
     local harmful = not ThrowGrenade.IsHarmless(grenade)
     if not harmful and dist < UTILITY_MIN_DIST then return nil end

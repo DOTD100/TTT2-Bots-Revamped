@@ -117,7 +117,7 @@ function Stalk.OnRunning(bot)
     local targetPos = target:GetPos()
     local targetEyes = target:EyePos()
 
-    local isClose = bot:Visible(target) and bot:GetPos():Distance(targetPos) <= 150
+    local isClose = lib.CanSeeEntity(bot, target) and bot:GetPos():Distance(targetPos) <= 150
     local loco = bot:BotLocomotor()
     if not loco then return STATUS.FAILURE end
     loco:SetGoal(targetPos)

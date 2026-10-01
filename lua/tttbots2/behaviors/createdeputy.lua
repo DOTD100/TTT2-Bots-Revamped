@@ -105,7 +105,7 @@ function CreateDeputy.OnRunning(bot)
     end
     --]]
 
-    local isClose = bot:Visible(target) and bot:GetPos():Distance(targetPos) <= 150
+    local isClose = lib.CanSeeEntity(bot, target) and bot:GetPos():Distance(targetPos) <= 150
     local loco = bot:BotLocomotor()
     local inv = bot:BotInventory()
     if not (loco and inv) then return STATUS.FAILURE end

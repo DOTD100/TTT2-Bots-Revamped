@@ -102,7 +102,7 @@ function CurseSwap.GetChasePos(bot, target)
     local memory = bot:BotMemory()
     if not memory then return nil, false end
 
-    if bot:Visible(target) then
+    if lib.CanSeeEntity(bot, target) then
         memory:UpdateKnownPositionFor(target)
 
         return target:GetPos(), true
