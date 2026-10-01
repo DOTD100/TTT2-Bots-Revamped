@@ -31,7 +31,7 @@ function InvestigateCorpse.GetVisibleUnidentified(bot)
     for i, corpse in pairs(corpses) do
         if not IsValid(corpse) then continue end
         if InvestigateCorpse.IsOurBoomBody(bot, corpse) then continue end
-        local visible = bot:Visible(corpse)
+        local visible = lib.CanSeeEntity(bot, corpse)
         local found = CORPSE.GetFound(corpse, false)
         local distTo = bot:GetPos():Distance(corpse:GetPos())
         -- TTTBots.DebugServer.DrawCross(corpse:GetPos(), 10, Color(255, 0, 0), 1, "body")

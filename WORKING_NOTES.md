@@ -47,8 +47,9 @@ had to stay dormant because of it), 34 (the Jester and the Swapper fighting a fi
 post-round deathmatch, where a second target rule turned out to have none of the first one's guards), 36 (the
 Mesmerist's defibrillator letting the trigger up before the weapon's own revive timer, when releasing the trigger
 is what cancels the revival), 37 (a NULL attack target reaching the tick's visibility cache and throwing
-"Tried to use a NULL entity!") and 38 (the deathmatch hiding node calling `Player:Visible` with a position,
-because a comment above it claimed that was allowed).
+"Tried to use a NULL entity!"), 38 (the deathmatch hiding node calling `Player:Visible` with a position, because a
+comment above it claimed that was allowed) and 39 (the whole addon asking "can I see that player" with an
+NPC-shaped function that returns false for every player on a server that sets `ai_ignoreplayers`).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -59,7 +60,7 @@ because a comment above it claimed that was allowed).
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Eleven rules this session paid for, in the order they cost time:**
+**Twelve rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -131,6 +132,13 @@ because a comment above it claimed that was allowed).
    not damage. When a phase gets its own copy of a decision (post-round, deathmatch, respawn, mid-round team
    change), diff it against the original and carry the guards across - and then add its own, because a Jester
    *should* pick fights during the round and must not after it.
+12. **An API's documented audience is part of its contract.** Section 39: `Entity:Visible` reads like the obvious
+   way to ask "can A see B", and its own page says "meant to be used only with NPCs" - with `ai_ignoreplayers`
+   making it return false for every player target, and `FL_NOTARGET` doing the same for one player. The addon had
+   been calling it for players ever since the performance sweep centralised visibility onto it, so a server that
+   sets that single cvar would have had blind bots - silently, because on default settings the two agree. When a
+   refactor picks a primitive it inherits that primitive's contract: read the page before choosing, and prefer the
+   implementation written for the job (here the addon's own three-point shot trace) over one that merely exists.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -2435,3 +2443,57 @@ at the first observer who can see the spot, which is the common case for a bad s
 one. Both the node's own position check and its spot check go through the same function.
 
 **Verification:** glua-check 128 files, 0 issues, 2 notes; GluaLint clean on `behaviors/evade.lua`.
+
+---
+
+## 39. The addon asked "can I see that player" with an NPC function - one server cvar could blind every bot
+
+**Found by** the `gmodwiki` MCP server, in its first four lookups. It was brought in to confirm the primitive
+behind section 38's fix and, while doing that, produced the page for the function the whole visibility system was
+built on.
+
+**What the wiki says about `Entity:Visible`**, which is what [`Lib.SeenThisTick`](lua/tttbots2/lib/sh_botlib.lua:259)
+used for every answer:
+
+- "This is meant to be used only with **NPCs**";
+- "If `ai_ignoreplayers` is turned on and target is a player, **returns false**";
+- "If target has `FL_NOTARGET`, returns false";
+- and it traces with `MASK_BLOCKLOS`-flavoured masks and a custom `CTraceFilterLOS` rather than a shot trace.
+
+On a server with `ai_ignoreplayers 1` every visual answer a bot gets is therefore "no": no targets, no shooting, no
+grenades, no stalking, none of the witnessed-combat or red-handed suspicion. One cvar, silent, total blindness -
+and none of `ai_ignoreplayers`, `FL_NOTARGET` or `ai_LOS_mode` is set or read anywhere in this tree, so it was
+never ours to notice.
+
+**How it got there, which is the lesson.** Before the performance sweep (31) the addon had its own answer,
+[`Lib.CanSee`](lua/tttbots2/lib/sh_botlib.lua:355): three `MASK_SHOT` traces to the target's eyes, centre and
+feet. The sweep centralised the hot path onto `SeenThisTick` for a real win - four to six asks per pair per tick
+became one - but it centralised onto an *existing* primitive rather than the *correct* one, and in doing so
+replaced a shot-accurate test with an NPC line-of-sight test. Nothing failed loudly, because on a default server
+the two agree.
+
+**The fix.** [`Lib.CanSeeEntity(ply, target)`](lua/tttbots2/lib/sh_botlib.lua:377) is now the single answer to an
+entity question: a player goes through the existing three-point `CanSee`, anything else is one trace to its centre.
+`SeenThisTick` calls it (keeping the per-tick memoisation and the non-entity guard from 37), the isolation cache in
+`updateIsolationCache` calls it, and the ten files that asked `X:Visible(Y)` directly were converted: morality
+(red-handed, witnessed combat, corpse in view), the locomotor (nearby players, the random look target), `curseswap`,
+`createsidekick`, `createdeputy`, `hiddenstalk`, `investigatecorpse`, `shankerstalk`, `stalk` and `throwgrenade`.
+
+**Deliberately unchanged: every position question.** `Entity:VisibleVec` takes a vector, is documented as a plain
+trace and carries none of those caveats, so the spot, corpse and noise checks (morality, locomotor,
+`investigatenoise`, `investigatecorpse`, memory, `plantbomb`, `paranoid`, `attacktarget` and `CanSeeArc` itself)
+stay on it - including section 38's fix, which is what prompted this.
+
+**The end state is checkable:** a grep for `:Visible(` across `lua/tttbots2` returns four comment blocks and no
+calls at all - the section 37 and section 38 notes, a historical note in `shinigami.lua`, and one commented-out
+snippet in `createdeputy.lua` that mirrors the live line in `createsidekick.lua`.
+
+**Cost.** The common direction (an unobstructed target) is still *one* trace, because `CanSee` returns at the eyes
+and only falls through to centre and feet when they are blocked. The memoisation is untouched, so the sweep's
+saving stands: this restores the accuracy the addon had before section 31 while keeping the sharing that section
+introduced.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: no new warnings - the big files still report
+exactly their previous counts (13 in `sh_botlib`, 6 in `sv_morality`, 12 in `sv_locomotor`) and the six warnings
+across `createsidekick`, `createdeputy` and `stalk` are the pre-existing shadowing, parenthesis and double-if ones,
+none of them on a line this section touched.

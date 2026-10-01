@@ -104,7 +104,7 @@ local function UpdateIsolationCache(bot, other)
     local witnesses = TTTBots.Lib.GetAllWitnessesBasic(other:EyePos(), TTTBots.Roles.GetNonAllies(bot), bot)
     isolation = isolation + (VISIBLE_FACTOR * table.Count(witnesses))
     isolation = isolation + (DISTANCE_FACTOR * bot:GetPos():Distance(other:GetPos()))
-    isolation = isolation + (VISIBLE_ME_FACTOR * (bot:Visible(other) and 1 or 0))
+    isolation = isolation + (VISIBLE_ME_FACTOR * (TTTBots.Lib.CanSeeEntity(bot, other) and 1 or 0))
     isolation = isolation + (math.random(-3, 3) / 10) -- Add a bit of randomness to the isolation
 
     -- Store the calculated isolation in the cache
@@ -253,18 +253,17 @@ end
 --- inside one timer iteration, so a counter cannot split a tick in half the way a wall-clock bucket can. With
 --- no counter - the client, or anything running before the first tick - this is a plain trace.
 ---@param bot Player
----@param target Player
+---@param target Entity A player, or anything else an entity question is asked about (a corpse, the ankh).
 ---@return boolean
 ---@realm shared
 function TTTBots.Lib.SeenThisTick(bot, target)
-    -- Answering "no" rather than calling a method on something that is not an entity: `bot:Visible(target)`
-    -- raises "Tried to use a NULL entity!" on the shared NULL userdata, and NULL is a value that reaches here
-    -- (the setter that stores attack targets normalises it, but a field assigned directly would not be).
-    -- Invalid also covers a bot that has been removed, which is the same answer for the same reason.
+    -- Answering "no" rather than calling a method on something that is not an entity. NULL is a value that reaches
+    -- here - the setter that stores attack targets normalises it, but a field assigned directly would not - and an
+    -- invalid bot gets the same answer for the same reason.
     if not (IsValid(bot) and IsValid(target)) then return false end
 
     local tick = TTTBots.TickCounter
-    if not tick then return bot:Visible(target) end
+    if not tick then return TTTBots.Lib.CanSeeEntity(bot, target) end
 
     if tick ~= visibleCacheTick then
         visibleCache = {}
@@ -279,7 +278,9 @@ function TTTBots.Lib.SeenThisTick(bot, target)
 
     local answer = forBot[target]
     if answer == nil then
-        answer = bot:Visible(target)
+        -- The addon's own trace, not `Entity:Visible`: see Lib.CanSeeEntity for why that function cannot answer
+        -- this question, and section 39 for what it was doing to bots on servers with `ai_ignoreplayers`.
+        answer = TTTBots.Lib.CanSeeEntity(bot, target)
         forBot[target] = answer
     end
 
@@ -372,6 +373,40 @@ function TTTBots.Lib.CanSee(ply1, ply2)
     if traceCenter.Entity == ply2 then return true end
 
     return false
+end
+
+--- Can `ply` see `target`, for an entity of any kind? This is the one place the addon asks that question.
+---
+--- `Entity:Visible` is *not* the way to ask it, which is what this function exists to replace. The wiki's page for
+--- it says "this is meant to be used only with NPCs", and it goes further: it returns false when `ai_ignoreplayers`
+--- is 1 and the target is a player, and false for any target carrying `FL_NOTARGET`. Either one silently blinds
+--- every bot on a server that has it set, and it was the primitive the per-tick visibility cache was built on
+--- (section 39). It also traces with `MASK_BLOCKLOS`-flavoured masks and `CTraceFilterLOS` rather than a shot
+--- trace, so its idea of an occluder is an NPC's, not a bullet's.
+---
+--- `Entity:VisibleVec` is a different function and stays in use: it takes a *position*, it is documented as a
+--- plain trace, and it carries none of those caveats - so position questions (spot visibility, corpse and noise
+--- checks) keep using it.
+---
+--- A player is tested at three points, through Lib.CanSee, so somebody showing a head over a railing is still
+--- seen; anything else is a single trace to its centre.
+---@param ply Player
+---@param target Entity
+---@return boolean canSee
+---@realm shared
+function TTTBots.Lib.CanSeeEntity(ply, target)
+    if not (IsValid(ply) and IsValid(target)) then return false end
+
+    if target:IsPlayer() then return TTTBots.Lib.CanSee(ply, target) end
+
+    local trace = util.TraceLine({
+        start = ply:EyePos(),
+        endpos = target:WorldSpaceCenter(),
+        filter = ply,
+        mask = MASK_SHOT
+    })
+
+    return trace.Entity == target
 end
 
 --- Checks if ply can see pos within an arc of X degrees. If so, checks if a VisibleVec returns true.

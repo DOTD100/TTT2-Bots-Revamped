@@ -117,12 +117,12 @@ function CreateSidekick.OnRunning(bot)
     local targetPos = target:GetPos()
     local targetEyes = target:EyePos()
 
-    if not (math.random(1, TTTBots.Tickrate * 2) == 1 and bot:Visible(target)) then
+    if not (math.random(1, TTTBots.Tickrate * 2) == 1 and lib.CanSeeEntity(bot, target)) then
         CreateSidekick.CheckForBetterTarget(bot)
         if CreateSidekick.GetTarget(bot) ~= target then return STATUS.RUNNING end
     end
 
-    local isClose = bot:Visible(target) and bot:GetPos():Distance(targetPos) <= 150
+    local isClose = lib.CanSeeEntity(bot, target) and bot:GetPos():Distance(targetPos) <= 150
     local loco = bot:BotLocomotor()
     local inv = bot:BotInventory()
     if not (loco and inv) then return STATUS.FAILURE end

@@ -29,7 +29,7 @@ local function findTarget(bot)
 
     for _, ply in ipairs(TTTBots.Roles.GetNonAllies(bot)) do
         if not lib.IsPlayerAlive(ply) then continue end
-        if not bot:Visible(ply) then continue end
+        if not lib.CanSeeEntity(bot, ply) then continue end
 
         local dist = bot:GetPos():Distance(ply:GetPos())
         if dist > SEEK_RANGE then continue end
@@ -50,7 +50,7 @@ end
 local function getChasePos(bot, target)
     local memory = bot.components.memory
 
-    if bot:Visible(target) then
+    if lib.CanSeeEntity(bot, target) then
         memory:UpdateKnownPositionFor(target)
         return target:GetPos()
     end

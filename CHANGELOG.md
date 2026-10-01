@@ -42,6 +42,11 @@ verified sources and the traps behind every line below; it is not part of the ad
 - **TTT2** Bots in roles that cannot fight no longer attack during the post-round deathmatch - the Jester, the
   Swapper, and the roles whose addons zero their damage, such as the Beggar and the Collusionist. They hide from
   everybody instead of walking into a fight they cannot win.
+- Bots no longer ask whether they can see somebody through `Entity:Visible`. That is an NPC function which returns
+  false for every player on a server that sets `ai_ignoreplayers`, and false for anyone carrying `FL_NOTARGET` -
+  either one silently blinding every bot. The answer is now the addon's own shot trace: three points on a player,
+  the centre for anything else. Position checks (spots, corpses, noises) keep the vector test, which never had
+  those caveats.
 - The hiding behaviour used in the post-round deathmatch no longer throws once a tick: it asked whether a player
   could see a position with `Player:Visible`, which only accepts an entity.
 - **TTT2** Defibrillator revives are held for as long as the weapon's own revive timer asks for, instead of a flat

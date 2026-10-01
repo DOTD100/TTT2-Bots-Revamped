@@ -1295,7 +1295,7 @@ function BotLocomotor:SetRandomLookPlayer()
     for i, ply in pairs(plys) do
         if not lib.IsPlayerAlive(ply) then continue end
         if ply == self.bot then continue end
-        if self.bot:Visible(ply) then
+        if lib.CanSeeEntity(self.bot, ply) then
             table.insert(plysNearby, ply)
         end
     end
@@ -1321,7 +1321,7 @@ function BotLocomotor:TryRandomPlayerLook()
 
     if success then
         self.randomLook = self.randomLookEntity:GetPos() + Vector(0, 0, 64)
-        if not self.bot:Visible(self.randomLookEntity) then self.randomLookEntity = nil end
+        if not lib.CanSeeEntity(self.bot, self.randomLookEntity) then self.randomLookEntity = nil end
     end
 
     return success
