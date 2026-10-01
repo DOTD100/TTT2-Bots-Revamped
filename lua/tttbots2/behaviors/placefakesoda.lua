@@ -104,7 +104,9 @@ end
 function PlaceFakeSoda.HasDecoyGround(ply)
     if not PlaceFakeSoda.IsAvailable() then return false end
 
-    for _, can in ipairs(ents.FindByClass("soda_*")) do
+    -- Real cans only: the decoy is dressed as one of these, and the addon's own cans are a different class
+    -- family entirely. See the clearance test below for why that distinction matters.
+    for _, can in ipairs(lib.GetSodaCans()) do
         if IsValid(can) then return true end
     end
 
@@ -126,6 +128,10 @@ function PlaceFakeSoda.GetGroundSpot(bot, candidate)
     if not tr.Hit then return nil end
     if tr.HitNormal.z < SURFACE_Z then return nil end
 
+    -- A radius query, and deliberately *not* `lib.GetSodaCans()`: this rule is "no decoy within 28 units of a
+    -- can that is already there", and the addon's own cans are `ent_ttt2_fake_soda_*`, which `soda_*` does not
+    -- match - so a class query here would happily drop a second decoy on top of the first. `isASoda`'s substring
+    -- test is what covers both families, which is why this one stays a scan over whatever happens to be nearby.
     for _, ent in ipairs(ents.FindInSphere(tr.HitPos + Vector(0, 0, 8), CAN_CLEARANCE)) do
         if ent ~= bot and isASoda(ent) then return nil end
     end
@@ -140,7 +146,7 @@ function PlaceFakeSoda.FindNearbyCan(bot)
     local myPos = bot:GetPos()
     local best, bestDist = nil, nil
 
-    for _, can in ipairs(ents.FindByClass("soda_*")) do
+    for _, can in ipairs(lib.GetSodaCans()) do
         if not IsValid(can) then continue end
 
         local dist = myPos:Distance(can:GetPos())

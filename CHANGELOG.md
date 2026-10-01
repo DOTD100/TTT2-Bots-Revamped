@@ -54,6 +54,8 @@ verified sources and the traps behind every line below; it is not part of the ad
   was killing its own attempt - most visibly the Mesmerist, whose revive timer is a setting that goes up to 30.
 - A `NULL` attack target no longer reaches the per-tick visibility check, which used to throw "Tried to use a NULL
   entity!" roughly once a second for as long as the bot held it.
+- The health-station behaviour no longer trusts a station that has already been removed from the world: a removed
+  entity is the `NULL` entity rather than `nil`, and the cached station it is holding is now checked with `IsValid`.
 - **TTT2** Bots no longer make gameplay callouts while dead, and no longer plant two C4s in the same spot.
 - **TTT2** Bots no longer freeze at gunshots, or "see through floors" when a shot lands below them.
 - **TTT2** RDM has a minimum time (`ttt_bot_rdm_delay`), and an invalid `ParanoidKiller` suspicion reason was fixed.
@@ -70,6 +72,11 @@ verified sources and the traps behind every line below; it is not part of the ad
 - "Can this bot see that player" is answered once per tick per pair and shared, instead of the memory pass, the
   attack behaviour, the ADS check, the inventory and four morality passes each firing their own traces.
 - Per-tick allocation churn and one per-tick world scan were removed.
+- The health-station lookup is cached and now runs last, behind its own guards: it used to be a world scan on every
+  pass through the behaviour tree for **every** bot, including one that was already carrying a station and one at
+  full health, neither of which has anything to walk to a station for.
+- The two soda-can lookups share one cached list. The drink behaviour and the fake-soda decoy both asked the world
+  for the same set of cans, one of them up to once per bot per tick and one of them with a cache already.
 
 ## v1.3.4
 

@@ -48,8 +48,10 @@ post-round deathmatch, where a second target rule turned out to have none of the
 Mesmerist's defibrillator letting the trigger up before the weapon's own revive timer, when releasing the trigger
 is what cancels the revival), 37 (a NULL attack target reaching the tick's visibility cache and throwing
 "Tried to use a NULL entity!"), 38 (the deathmatch hiding node calling `Player:Visible` with a position, because a
-comment above it claimed that was allowed) and 39 (the whole addon asking "can I see that player" with an
-NPC-shaped function that returns false for every player on a server that sets `ai_ignoreplayers`).
+comment above it claimed that was allowed), 39 (the whole addon asking "can I see that player" with an NPC-shaped
+function that returns false for every player on a server that sets `ai_ignoreplayers`) and 40 (three per-tick
+entity scans that a codebase index turned up: two folded behind their own guards or shared, and the third already
+cached - where the honest answer was to leave it alone).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -60,7 +62,7 @@ NPC-shaped function that returns false for every player on a server that sets `a
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Twelve rules this session paid for, in the order they cost time:**
+**Thirteen rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -139,6 +141,14 @@ NPC-shaped function that returns false for every player on a server that sets `a
    sets that single cvar would have had blind bots - silently, because on default settings the two agree. When a
    refactor picks a primitive it inherits that primitive's contract: read the page before choosing, and prefer the
    implementation written for the job (here the addon's own three-point shot trace) over one that merely exists.
+13. **Two scans that touch the same object are not the same question.** Section 40: `placefakesoda.lua` asks two
+   separate things about soda cans. "Is there a real can to sit the decoy beside" is `ents.FindByClass("soda_*")`,
+   and pointing it at the shared cached list is a straight saving. "Is anything already standing where the decoy
+   would go" is *not* that query: the Fake Soda addon's own cans are `ent_ttt2_fake_soda_*`, which `soda_*` does
+   not match, so the class list would have let a bot drop decoy on decoy - and the test the file actually writes is
+   `string.find(class, "soda")`, deliberately broader than either pattern. Sharing one cache between two lookups is
+   only safe once you have compared what each of them is asking; the wildcard is a claim about every entity of
+   that kind, and the claim is usually wrong.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -156,8 +166,10 @@ section first.
 
 **Current state:** `node tools/glua-check/check.js` -> **128 files, 0 issues, 2 notes** (both pre-existing and
 nil-guarded: `cl_scoreboard.lua:313`, `sh_concommands.lua:182`). GluaLint over the whole tree reports **174
-warning lines across the 128 files** - that count has not moved for the seven files sections 33 and 34 added, so
-they are lint-clean - and all of them are pre-existing style. The per-kind breakdown is in section 19, and every
+warning lines across the 128 files** - that count has not moved for the seven files sections 33 and 34 added, nor
+for section 40's four edits, which were re-measured per file (`sh_botlib.lua` 13, its previous count, and
+`drinksoda.lua`, `placefakesoda.lua` and `usehealthstation.lua` at 0 each) - so they are lint-clean, and all of
+them are pre-existing style. The per-kind breakdown is in section 19, and every
 section's verification line is a point-in-time record of the count when that change landed.
 
 **Upload prep (2026-09-25), so a later session neither redoes it nor undoes it:** `.gitignore` now excludes
@@ -195,6 +207,7 @@ and cw SWEPs), the position-based witness helpers, and `CullSoundMemory`'s per-s
 | Syntax-check everything (fallback, no extension needed) | write `.roo/lua_sweep.py` (body below), run `python .roo/lua_sweep.py` |
 | Read a workshop addon | `"<gmad>" extract -file <gma> -out <dir>` - `fastgmad.exe`, or the `gmad` shipped with a GMod server |
 | Delete temp files | `cmd /c "del /f /q .roo\name.py 2>nul & dir /b .roo"` |
+| Find candidate hotspots across the tree | the editor's semantic codebase index (`codebase_search`) - **shape** questions only, like "what runs every tick and loops over all players" or "which entity scans are uncached". It cannot judge an API's contract (39 came from the wiki) and it cannot measure, so it ranks a once-per-purchase scan beside a per-tick one; text-shaped queries drown in the locale chatter files. Treat every hit as a lead and confirm it by reading the file (40) |
 
 **Path notation.** The notes were prepared for publication, so every machine-specific root is a placeholder:
 nothing here names a drive, a user profile or an install folder. Everything not in angle brackets is relative
@@ -2497,3 +2510,51 @@ introduced.
 exactly their previous counts (13 in `sh_botlib`, 6 in `sv_morality`, 12 in `sv_locomotor`) and the six warnings
 across `createsidekick`, `createdeputy` and `stalk` are the pre-existing shadowing, parenthesis and double-if ones,
 none of them on a line this section touched.
+
+---
+
+## 40. Three per-tick entity scans - two fixed, the third already cached, and the index that found them
+
+**Provenance.** This one came from a question rather than a report: whether a newly enabled codebase index (the
+editor's semantic one) is any use for finding mistakes across the tree. It is, for one narrow class of question -
+"what runs every tick and loops over all players", "which entity scans are uncached" - and it is no use at all for
+two others: it cannot judge an API's contract (39 came from the wiki, not the index) and it cannot measure, so it
+ranks a once-per-purchase scan beside a per-tick one. It is a lead generator, and every hit below was confirmed by
+reading the file it pointed at.
+
+**What it surfaced:** three `ents.FindByClass` / `ents.FindInSphere` sites outside the lib, so the sweep became
+"for each one - is it hot, and is there a cached twin already in the tree?" Two had a cached twin. One did not.
+
+1. **The health-station scan, [`behaviors/usehealthstation.lua`](lua/tttbots2/behaviors/usehealthstation.lua)** -
+   the real find. `Validate` computed `(bot.targetStation or GetNearestStation(bot) ~= nil)` **before** the
+   `return hasHealthStation or (isHurt and isStationNearby)` short-circuit, so every bot on the server - healthy,
+   or already carrying a station - paid for a world scan on every pass through the tree, and each call rebuilt a
+   filtered table besides. **Fix:** the valid stations are cached for a second (`getValidStations`, next to
+   `ValidateStation`), and `Validate` is reordered so the scan is the last thing paid for and only by a bot that
+   has a use for it: carrying a station returns true first (a weapon lookup, not a scan), then a bot at full
+   health returns false. The result is unchanged - an empty list gives `nil` from `GetClosest` either way, and
+   `OnRunning` still re-validates the station it is walking to on every tick. **One deliberate behaviour change:**
+   the cached `bot.targetStation` is now read with `IsValid` rather than for truthiness. A removed station is the
+   NULL entity, which is truthy (8), so it used to start the behaviour and fail on its first tick; now the nearest
+   station is looked up instead.
+2. **The soda-can queries, [`behaviors/drinksoda.lua`](lua/tttbots2/behaviors/drinksoda.lua) and
+   [`behaviors/placefakesoda.lua`](lua/tttbots2/behaviors/placefakesoda.lua)** - two files asking the same
+   question, one with a cache and one without. `drinksoda.lua` had its own one-second `getCans()`; the decoy
+   behaviour scanned `ents.FindByClass("soda_*")` directly, once to decide whether the buyable is worth buying and
+   once per tick in `FindNearbyCan`. **Fix:** the cache moved into the lib as
+   [`Lib.GetSodaCans`](lua/tttbots2/lib/sh_botlib.lua:105), beside the alive-player cache it copies, and both
+   behaviours read it - one entity scan for the whole addon per second instead of one per bot per tick, the same
+   reasoning as the ankh cache in 33. **Deliberately *not* shared: the clearance test.** `GetGroundSpot` scans a
+   28-unit sphere and calls `isASoda`, a `string.find(class, "soda")` test - and the Fake Soda addon's own cans are
+   `ent_ttt2_fake_soda_*` (read from `mexikoedi/ttt2_fake_soda`, cloned to `.roo/refs/fakesoda`), which a `soda_*`
+   query does not match. Routing that one through the can cache would have let a bot drop decoy on decoy. It keeps
+   its radius scan, with a comment saying why, so the next sweep does not "fix" it (rule 13).
+3. **The barrel scan, [`Lib.GetClosestBarrel`](lua/tttbots2/lib/sh_botlib.lua:54) and
+   [`Attack.TargetNextToBarrel`](lua/tttbots2/behaviors/attacktarget.lua:275)** - already handled, and the reason
+   section 8 exists. Its only caller serves a three-second per-target cache that re-validates what it hands back,
+   so the 128-unit sphere scan runs once per bot per target per three seconds, not per tick. **Left alone.** The
+   index could not tell the difference between this and the health-station scan; reading the one caller could.
+
+**Verification:** `node tools/glua-check/check.js` -> 128 files, 0 issues, 2 notes (unchanged). GluaLint: whole
+tree **174 warning lines across 128 files**, unmoved - per file `sh_botlib.lua` 13 (its previous count, so the new
+function added nothing) and `drinksoda.lua`, `placefakesoda.lua` and `usehealthstation.lua` 0 each.
