@@ -213,6 +213,7 @@ and cw SWEPs), the position-based witness helpers, and `CullSoundMemory`'s per-s
 | Syntax-check everything (fallback, no extension needed) | write `.roo/lua_sweep.py` (body below), run `python .roo/lua_sweep.py` |
 | Read a workshop addon | `"<gmad>" extract -file <gma> -out <dir>` - `fastgmad.exe`, or the `gmad` shipped with a GMod server |
 | Delete temp files | `cmd /c "del /f /q .roo\name.py 2>nul & dir /b .roo"` |
+| Ask the GMod wiki about an API | the `gmodwiki` MCP server: `search_wiki` to find a page, `get_page` for arguments, returns, remarks and caveats. **Read the documented audience before calling anything** - that is how `Entity:Visible` was caught being an NPC function that returns false for every player on a server with `ai_ignoreplayers` (39) |
 
 **Path notation.** The notes were prepared for publication, so every machine-specific root is a placeholder:
 nothing here names a drive, a user profile or an install folder. Everything not in angle brackets is relative
