@@ -134,7 +134,8 @@ constructor.
 ### 5. `OPEN` — `pauseRepel` is not refcounted
 
 **Where:** `PauseRepel` (653) / `ResumeRepel` (658); callers `behaviors/defib.lua` (261, 160),
-`behaviors/usehealthstation.lua` (104, 129), `behaviors/mingecrowbar.lua` (99, 129).
+`behaviors/usehealthstation.lua` (129, 154), `behaviors/mingecrowbar.lua` (99, 129).
+-- Line 137 moved by 25 lines when the station scan cache was added above it; the calls themselves are unchanged.
 
 **Symptom:** Three behaviours pause repel and each resumes it on end. Whoever calls `ResumeRepel()`
 first un-pauses for everyone, so a bot can be shoved out of a defib or health-station interaction by an

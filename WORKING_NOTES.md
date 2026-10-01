@@ -2607,3 +2607,13 @@ reading the file it pointed at.
 **Verification:** `node tools/glua-check/check.js` -> 128 files, 0 issues, 2 notes (unchanged). GluaLint: whole
 tree **174 warning lines across 128 files**, unmoved - per file `sh_botlib.lua` 13 (its previous count, so the new
 function added nothing) and `drinksoda.lua`, `placefakesoda.lua` and `usehealthstation.lua` 0 each.
+
+**Line-number citations this section moved, left as written on purpose.** The cache was inserted above
+`isolationCache` in `sh_botlib.lua`, so everything below `GetAlivePlayers` in that file is now **23 lines lower** -
+section 39's `Lib.SeenThisTick` citation of 259 is now 282, and `Lib.CanSee` (355 -> 379), `CanSeeEntity` (377 ->
+420), `CanSeeArc` (383 -> 441), `GetInferredLookPos`, `HoldsLongRangeWeapon`, `GetAllWitnessesBasic`,
+`GetNavRegions` and `VoluntaryDisconnect` moved with it. Deleting `getCans` from `drinksoda.lua` pulled
+`DrinkSoda.FindCan` **16 lines up** (section 31's citation of 89 is now 80), and `usehealthstation.lua` is 25 lines
+longer. Every citation in this file is a point-in-time record and several of them (26, 31) had already drifted, so
+they are left alone rather than renumbered - but the movement register is authoritative and was corrected, its
+`usehealthstation.lua` `PauseRepel`/`ResumeRepel` caller lines going from (104, 129) to (129, 154).
