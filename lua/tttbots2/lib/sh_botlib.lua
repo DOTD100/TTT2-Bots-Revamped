@@ -111,6 +111,26 @@ function TTTBots.Lib.GetSodaCans()
     return sodaCanCache
 end
 
+local ankhCache, ankhCacheTick
+
+---Every placed Ankh in the world (`ttt_ankh`), refreshed at most once per tick for the whole addon.
+---
+---Three behaviours ask for this set - the one that breaks an enemy ankh, the one that moves its own and the one
+---that converts one - and two of them scanned for it themselves on every pass through their tree. There are never
+---more than one or two ankhs on a map, but the query still walks the entity list, so one shared answer per tick
+---(keyed on `TTTBots.TickCounter`, the same key the per-tick visibility cache uses) beats one per bot.
+---@return table<Entity>
+---@realm server
+function TTTBots.Lib.GetAnkhs()
+    local tick = TTTBots.TickCounter
+    if tick and tick == ankhCacheTick then return ankhCache end
+
+    ankhCache = ents.FindByClass("ttt_ankh")
+    ankhCacheTick = tick
+
+    return ankhCache
+end
+
 local isolationCache = {}
 
 -- Function to update the cache
@@ -524,7 +544,16 @@ end
 ---@realm shared
 function TTTBots.Lib.GetAllWitnesses(pos, botsOnly)
     local witnesses = {}
-    for _, ply in ipairs(botsOnly and TTTBots.Bots or player.GetAll()) do
+    -- Every caller passes botsOnly=true, so read the already-alive list instead of walking `player.GetAll()`
+    -- (or `TTTBots.Bots`) and re-filtering the dead out on every call.
+    local plys
+    if botsOnly then
+        plys = TTTBots.Match.AlivePlayers or {}
+    else
+        plys = player.GetAll()
+    end
+
+    for _, ply in ipairs(plys) do
         if TTTBots.Lib.IsPlayerAlive(ply) and IsValid(ply) then
             local sawthat = TTTBots.Lib.CanSeeArc(ply, pos, 90)
             if sawthat then

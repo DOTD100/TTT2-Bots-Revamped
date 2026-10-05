@@ -33,7 +33,6 @@ BreakAnkh.Interruptible = true
 
 local STATUS = TTTBots.STATUS
 
-local ANKH_ENTITY = "ttt_ankh"
 local ANKH_WEAPON = "weapon_ttt_ankh"
 
 --- Past this it is not shooting, it is a walk across the map to shoot an object.
@@ -41,21 +40,8 @@ local MAX_RANGE = 900
 --- See the header: 500 health at roughly one shot a second.
 local MAX_DURATION = 20
 
---- One entity scan per tick for the whole addon, not one per bot: this node sits in the shared `FightBack`
---- group, so every bot on the server asks the same question at the same time. Same reasoning as the soda-can
---- cache in behaviors/drinksoda.lua.
-local ankhCache, ankhCacheTick
-
----@return table<Entity>
-local function getAnkhs()
-    local tick = TTTBots.TickCounter
-    if tick and tick == ankhCacheTick then return ankhCache end
-
-    ankhCache = ents.FindByClass(ANKH_ENTITY)
-    ankhCacheTick = tick
-
-    return ankhCache
-end
+--- The ankh list is cached in the lib (`Lib.GetAnkhs`), keyed on the tick, so `breakankh`, `moveankh` and
+--- `stealankh` share one entity scan per tick instead of each scanning the world on their own.
 
 --- The addon's own handler, or nil when the role addon is not installed.
 ---@return table?
@@ -85,7 +71,7 @@ end
 local function findTarget(bot)
     local myPos = bot:GetPos()
 
-    for _, ankh in ipairs(getAnkhs()) do
+    for _, ankh in ipairs(lib.GetAnkhs()) do
         if not IsValid(ankh) then continue end
         if not isWorthBreaking(bot, ankh) then continue end
         if myPos:Distance(ankh:GetPos()) > MAX_RANGE then continue end

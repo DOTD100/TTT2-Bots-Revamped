@@ -44,6 +44,7 @@ Match.KOSCounter = {} ---@type table<Player, number>
 Match.KOSList = {} ---@type table<Player, table<Player>>
 Match.SpottedC4s = {} ---@type table<Entity, boolean> Armed C4 that has been spotted by the innocent bots at least once. key and value are the same entity
 Match.AllArmedC4s = {} ---@type table<Entity, boolean>
+Match.C4s = {} ---@type table<Entity> every C4 in the world, armed or not, refreshed once a second by UpdateC4List
 Match.Smokes = {}
 
 --- Stamp (or clear) each bot's life clock for Match.KillDelayElapsed.
@@ -449,9 +450,11 @@ if SERVER then
         local bombs = ents.FindByClass("ttt_c4")
 
         Match.AllArmedC4s = {}
+        Match.C4s = {}
 
         for i, c4 in pairs(bombs) do
             if not IsValid(c4) then continue end
+            Match.C4s[#Match.C4s + 1] = c4
             if not c4:GetArmed() then continue end
             Match.AllArmedC4s[c4] = true
         end

@@ -142,6 +142,8 @@ IN_USE = 32768 --- https://wiki.facepunch.com/gmod/Enums/IN
 ---@field killDelayAliveSince number? When the bot's current life began, for Match.KillDelayElapsed. Stamped and
 ---cleared by Match.Tick while the bot is alive and dead, so an unprovoked kill waits after a spawn or a revive
 ---the same way RDM does.
+---@field wanderStareAt number? Until this time the wander stare keeps re-using its last target without a rescan.
+---@field wanderStareTarget Player? The last player the wander stare chose to look at.
 ---@field fuseDeadline number? When this Fuse bot goes off, reconstructed in behaviors/fusecharge.lua.
 ---@field fuseChargePos Vector? Where a Fuse bot is running to while its fuse is nearly out.
 ---@field sodaDrankPos Vector? Where this bot emptied its last Super Soda can, so a decoy can go there.

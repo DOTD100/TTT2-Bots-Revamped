@@ -61,7 +61,7 @@ end
 ---@param bot Bot
 ---@return Entity?
 local function findOwnAnkh(bot)
-    for _, ankh in ipairs(ents.FindByClass(ANKH_ENTITY)) do
+    for _, ankh in ipairs(lib.GetAnkhs()) do
         if IsValid(ankh) and ankh:GetOwner() == bot then return ankh end
     end
 

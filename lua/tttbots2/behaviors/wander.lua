@@ -100,14 +100,23 @@ function Wander.OnRunning(bot)
 end
 
 ---Make the bot stare at the nearest player. Useful for when the bot is standing still.
+---
+--- Re-scan at most this often. `GetAllVisible` traces from every player on the server to the bot's position, and
+--- this runs every tick a bot stands at its goal - so an every-tick answer is `players` traces per bot for a look
+--- that only has to look natural. The chosen target is held between scans and re-issued each tick.
+local STARE_INTERVAL = 1
+
 ---@param bot Bot
 ---@param locomotor CLocomotor
 function Wander.StareAtNearbyPlayers(bot, locomotor)
-    local players = lib.GetAllVisible(bot:GetPos(), false)
-    local closest = lib.GetClosest(players, bot:GetPos())
+    if (bot.wanderStareAt or 0) <= CurTime() then
+        bot.wanderStareAt = CurTime() + STARE_INTERVAL
+        bot.wanderStareTarget = lib.GetClosest(lib.GetAllVisible(bot:GetPos(), false), bot:GetPos())
+    end
 
-    if closest then
-        locomotor:LookAt(closest:GetPos())
+    local target = bot.wanderStareTarget
+    if target and IsValid(target) then
+        locomotor:LookAt(target:GetPos())
     end
 end
 

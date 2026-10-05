@@ -109,7 +109,9 @@ end
 function PlantBomb.FindPlantSpot(bot)
     local options = TTTBots.Spots.GetSpotsInCategory("bomb")
     local weightedOptions = {}
-    local extantBombs = ents.FindByClass("ttt_c4")
+    -- `Match.C4s` is refreshed once a second (UpdateC4List) and this separation rule only cares about bombs that
+    -- have existed for that long; a just-placed bomb is handled by the spot reservation above, not this list.
+    local extantBombs = TTTBots.Match.C4s or {}
     -- The roomiest spot that failed the separation test, kept in case this map has nowhere that qualifies at all.
     local fallbackSpot, fallbackDist = nil, -math.huge
 
@@ -290,6 +292,8 @@ function PlantBomb.OnFailure(bot)
 end
 
 function PlantBomb.ArmNearbyBomb(bot)
+    -- Deliberately a fresh scan, not `Match.C4s`: this runs the tick the bot just placed its own bomb, and the
+    -- one-second cache may not contain it yet - arming nothing would leave a live, unarmed bomb on the floor.
     local bombs = ents.FindByClass("ttt_c4")
     local closestBomb = nil
     local closestDist = math.huge

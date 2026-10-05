@@ -49,9 +49,11 @@ Mesmerist's defibrillator letting the trigger up before the weapon's own revive 
 is what cancels the revival), 37 (a NULL attack target reaching the tick's visibility cache and throwing
 "Tried to use a NULL entity!"), 38 (the deathmatch hiding node calling `Player:Visible` with a position, because a
 comment above it claimed that was allowed), 39 (the whole addon asking "can I see that player" with an NPC-shaped
-function that returns false for every player on a server that sets `ai_ignoreplayers`) and 40 (three per-tick
-entity scans that a codebase index turned up: two folded behind their own guards or shared, and the third already
-cached - where the honest answer was to leave it alone).
+function that returns false for every player on a server that sets `ai_ignoreplayers`), 40 (three per-tick entity
+scans that a codebase index turned up: two folded behind their own guards or shared, and the third already cached -
+where the honest answer was to leave it alone) and 41 (a second index-led sweep: the wander stare throttled, the
+ankh scans shared, the C4 list shared with one deliberate exception, and one finding retracted for reading its
+caller wrong).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -62,7 +64,7 @@ cached - where the honest answer was to leave it alone).
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Thirteen rules this session paid for, in the order they cost time:**
+**Fourteen rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -149,6 +151,13 @@ cached - where the honest answer was to leave it alone).
    `string.find(class, "soda")`, deliberately broader than either pattern. Sharing one cache between two lookups is
    only safe once you have compared what each of them is asking; the wildcard is a claim about every entity of
    that kind, and the claim is usually wrong.
+14. **A scan's cost is decided by its caller, not by its existence - and a cache is only as fresh as its fill.**
+   Section 41: the index ranked several scans equal, and reading the callers separated them into "per tick" (the
+   wander stare, the ankh scans), "per attempt" (plantbomb's spot search runs once in `OnStart`) and "per success"
+   (`ArmNearbyBomb`). It also exposed the trap in sharing a cache blindly: `ArmNearbyBomb` must find the bomb the
+   bot placed *this tick*, which a once-a-second cached C4 list may not contain yet, so it keeps a fresh scan while
+   the separation rule reads the cache. Two halves of one lesson - count the call, and check what the answer has to
+   be fresh enough for.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -168,8 +177,9 @@ section first.
 nil-guarded: `cl_scoreboard.lua:313`, `sh_concommands.lua:182`). GluaLint over the whole tree reports **174
 warning lines across the 128 files** - that count has not moved for the seven files sections 33 and 34 added, nor
 for section 40's four edits, which were re-measured per file (`sh_botlib.lua` 13, its previous count, and
-`drinksoda.lua`, `placefakesoda.lua` and `usehealthstation.lua` at 0 each) - so they are lint-clean, and all of
-them are pre-existing style. The per-kind breakdown is in section 19, and every
+`drinksoda.lua`, `placefakesoda.lua` and `usehealthstation.lua` at 0 each), nor for section 41's eight edits
+(`sh_botlib.lua` 13, `sh_match.lua` 1, and the six touched behaviours at 0 each) - so they are lint-clean, and all
+of them are pre-existing style. The per-kind breakdown is in section 19, and every
 section's verification line is a point-in-time record of the count when that change landed.
 
 **Upload prep (2026-09-25), so a later session neither redoes it nor undoes it:** `.gitignore` now excludes
@@ -2568,3 +2578,41 @@ section 39's `Lib.SeenThisTick` citation of 259 is now 282, and `Lib.CanSee` (35
 longer. Every citation in this file is a point-in-time record and several of them (26, 31) had already drifted, so
 they are left alone rather than renumbered - but the movement register is authoritative and was corrected, its
 `usehealthstation.lua` `PauseRepel`/`ResumeRepel` caller lines going from (104, 129) to (129, 154).
+
+---
+
+## 41. An index-led sweep - one real per-tick trace loop, two caches shared, and a finding retracted
+
+**Provenance.** The same codebase index as 40, asked to look wider: hot paths, entity scans, timers, visibility
+helpers and the known bug classes. Everything below was confirmed by reading the caller, because the index itself
+ranks a once-per-attempt scan beside a per-tick one (rule 14).
+
+1. **The wander stare was tracing every player every tick - the real win.**
+   [`Wander.StareAtNearbyPlayers`](lua/tttbots2/behaviors/wander.lua:102) called
+   [`Lib.GetAllVisible`](lua/tttbots2/lib/sh_botlib.lua:928) on every tick a bot stood at its goal, and
+   `GetAllVisible` fires a `VisibleVec` trace from every player on the server to that position. Wandering is the
+   default idle state, so this was the most frequent remaining trace loop in the addon. It now re-scans at most
+   once a second and holds the chosen look-target in `bot.wanderStareTarget`, re-issuing `LookAt` each tick so the
+   stare does not go stiff between scans.
+2. **The ankh scans are now one shared query.** `moveankh` and `stealankh` each ran `ents.FindByClass("ttt_ankh")`
+   from their `Validate` (per tick) while `breakankh` already cached it. The cache moved into the lib as
+   [`Lib.GetAnkhs`](lua/tttbots2/lib/sh_botlib.lua:113), keyed on `TTTBots.TickCounter` like the visibility cache,
+   and all three behaviours read it. Impact is bounded by role rarity, but it is the same shape the soda cache
+   fixed in 40.
+3. **`GetAllWitnesses` no longer re-filters the server.** It iterated `TTTBots.Bots` (or `player.GetAll()`) and
+   tested `IsPlayerAlive` per player; every caller passes `botsOnly=true`, so it now reads
+   `TTTBots.Match.AlivePlayers` instead.
+4. **The C4 list is shared, with one deliberate exception.** `Match.UpdateC4List` now keeps `Match.C4s` (every C4,
+   armed or not) beside `Match.AllArmedC4s`, and `PlantBomb.FindPlantSpot` reads it for its separation rule.
+   [`PlantBomb.ArmNearbyBomb`](lua/tttbots2/behaviors/plantbomb.lua:293) keeps a **fresh** scan with a comment:
+   it runs the tick the bot just placed its own bomb, which the one-second cache may not contain yet, so arming
+   from the cache could leave a live, unarmed bomb on the floor (rule 14).
+
+**Retracted: "cache plant-spot evaluation".** The report that started this read `FindPlantSpot` as per-tick; it is
+called once per attempt from [`PlantBomb.OnStart`](lua/tttbots2/behaviors/plantbomb.lua:202), and the spot is then
+held in `bot.bombPlantSpot` for the whole walk. There was nothing per-tick to cache, so nothing was changed - the
+same trap the barrel scan sprang in 40, and the reason the sweep's one rule is "read the caller".
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes (unchanged). GluaLint: the eight touched files report
+exactly their previous counts (`sh_botlib.lua` 13, `sh_match.lua` 1, and `breakankh`, `moveankh`, `stealankh`,
+`wander`, `plantbomb` and `meta_defs` 0), so the whole-tree total is still 174 warning lines across 128 files.

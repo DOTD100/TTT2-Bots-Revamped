@@ -101,7 +101,7 @@ end
 ---@param handler table
 ---@return Entity?
 local function findConvertibleAnkh(bot, handler)
-    for _, ankh in ipairs(ents.FindByClass(ANKH_ENTITY)) do
+    for _, ankh in ipairs(lib.GetAnkhs()) do
         if not IsValid(ankh) then continue end
         if canConvert(bot, ankh, handler) then return ankh end
     end

@@ -77,6 +77,12 @@ verified sources and the traps behind every line below; it is not part of the ad
   full health, neither of which has anything to walk to a station for.
 - The two soda-can lookups share one cached list. The drink behaviour and the fake-soda decoy both asked the world
   for the same set of cans, one of them up to once per bot per tick and one of them with a cache already.
+- The wander stare no longer traces every player on the server every tick: it picks its look-target at most once a
+  second and holds it in between.
+- The three Ankh behaviours share one cached entity scan per tick instead of two of them scanning the world each.
+- `GetAllWitnesses` reads the already-alive player list instead of walking the whole server and filtering.
+- `PlantBomb` reads the cached C4 list for its separation rule; arming still scans fresh, because the just-placed
+  bomb is not in the one-second cache yet.
 
 ## v1.3.4
 
