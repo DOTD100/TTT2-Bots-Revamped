@@ -33,6 +33,11 @@ verified sources and the traps behind every line below; it is not part of the ad
   knife), so the Roider, the Shinigami and the Shanker kept stopping short and swinging at air.
 - A bot only walks to a sniper perch if it is actually carrying a weapon that can use one.
 - `ttt_bot_attack_delay` is now the single knob for "not yet", rather than one of three half-applied timers.
+- Bots no longer all wander to the same place. The popularity map is sorted most-popular-first, and the wander
+  picker, the loves-crowds/loner picker and the plan coordinator's "popular area" job each read it from the top -
+  which is one answer for every bot on the server, so a quiet round sent the whole lobby to a single corner. They
+  now choose between the busiest few, and a bot avoids a destination another bot is already walking to (the claim
+  is that bot's live goal, so it expires by itself when it picks somewhere else).
 
 ### Fixed
 

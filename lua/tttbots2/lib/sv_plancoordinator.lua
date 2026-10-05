@@ -18,6 +18,29 @@ local IsRoundActive = TTTBots.Match.IsRoundActive --- @type function
 local PERCH_ANCHOR_COUNT = 10
 local PERCH_ANCHOR_RADIUS = 2000
 
+--- How many of the busiest (or quietest) areas a "go where people are" job chooses between.
+---
+--- `GetTopNPopularNavs(1)` is one answer for the whole server, and several bots can hold the same job - TestJob
+--- allows up to `MaxAssigned` of them - so a plan that sends bots to the popular place handed every one of them
+--- the identical nav area and they walked there in single file. Same spread as behaviors/wander.lua.
+local AREA_TARGET_SPREAD = 6
+
+--- A random point in one of the given ranked nav areas, or nil when none of them resolve.
+---@param navTbls table<table<number, number>> the result of GetTopNPopularNavs / GetTopNUnpopularNavs
+---@return Vector?
+local function randomPointInRankedAreas(navTbls)
+    local areas = {}
+    for i = 1, #navTbls do
+        local nav = navmesh.GetNavAreaByID(navTbls[i][1])
+        if nav then areas[#areas + 1] = nav end
+    end
+
+    if #areas == 0 then return nil end
+
+    local area = table.Random(areas)
+    return area and area:GetRandomPoint() or nil
+end
+
 -- hook.Add("TTTBeginRound", "TTTBots.PlanCoordinator.OnRoundStart", PlanCoordinator.OnRoundStart)
 -- hook.Add("TTTEndRound", "TTTBots.PlanCoordinator.OnRoundEnd", PlanCoordinator.OnRoundEnd)
 
@@ -118,26 +141,19 @@ function PlanCoordinator.CalcBombSpot(caller)
     return nil
 end
 
---- A Target Hashtable function to calculate a target for a job.
+--- A Target Hashtable function to calculate a target for a job. One of the busiest few places rather than the
+--- single busiest: the ranking is still respected, but two bots given the same job no longer stand on each other.
+---@param caller Player
 function PlanCoordinator.CalcPopularArea(caller)
-    local randArea = TTTBots.Lib.GetTopNPopularNavs(1) -- get the most popular nav
-    if not (randArea and randArea[1]) then return PlanCoordinator.CalcRandFriendly(caller) end
-    randArea = randArea[1][1]
-    local area = navmesh.GetNavAreaByID(randArea)
-    if not area then return PlanCoordinator.CalcRandFriendly(caller) end
-
-    return area:GetRandomPoint()
+    return randomPointInRankedAreas(TTTBots.Lib.GetTopNPopularNavs(AREA_TARGET_SPREAD)) or
+        PlanCoordinator.CalcRandFriendly(caller)
 end
 
---- A Target Hashtable function to calculate a target for a job.
+--- A Target Hashtable function to calculate a target for a job. The quiet counterpart, spread the same way.
+---@param caller Player
 function PlanCoordinator.CalcUnpopularArea(caller)
-    local randArea = TTTBots.Lib.GetTopNUnpopularNavs(1) -- get the least popular nav
-    if not (randArea and randArea[1]) then return PlanCoordinator.CalcRandFriendly(caller) end
-    randArea = randArea[1][1]
-    local area = navmesh.GetNavAreaByID(randArea)
-    if not area then return PlanCoordinator.CalcRandFriendly(caller) end
-
-    return area:GetRandomPoint()
+    return randomPointInRankedAreas(TTTBots.Lib.GetTopNUnpopularNavs(AREA_TARGET_SPREAD)) or
+        PlanCoordinator.CalcRandFriendly(caller)
 end
 
 local function getClosestVec(origin, vecs)

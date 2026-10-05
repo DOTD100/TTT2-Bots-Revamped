@@ -1,0 +1,48 @@
+[h1]TTT Bots Revamped[/h1]
+
+A maintained, heavily bug-fixed and expanded build of TTT Bots 2 - the bot addon for Trouble in Terrorist Town.
+Built for TTT2, and still fully playable in plain TTT.
+
+[b]This is an unofficial revamp of the original TTT Bots 2, not the original addon.[/b] It is the same project
+under the same licence (CC BY-SA 4.0); everything below is what has changed.
+
+[h2]More TTT2 roles are actually played properly[/h2]
+15 roles the original had no behaviour for now play with their own rules instead of a generic stand-in:
+Psychopath, Bandit, Gambler, Doctor, Roider, Fuse, Mesmerist, Thrall, Beggar, Collusionist, Blocker, Cursed,
+Revenant, Pharaoh and Graverobber. For example: the Roider only fights with its crowbar, the Beggar and the
+Collusionist never take a target because they cannot hurt anybody, the Mesmerist's defibrillator revives anyone,
+the Cursed leaves its role by swapping with another player, and the Revenant changes sides when it dies.
+
+[h2]Bots use the items their role is given[/h2]
+[list]
+[*]Ankh (Pharaoh / Graverobber): place it, hold the conversion, carry it somewhere safer, or shoot an enemy's down.
+[*]Grenades: pin pulled and thrown the way the weapon works, and only at an enemy they have lost sight of.
+[*]Super Soda cans, plus the Fake Soda decoy left where a real can belongs.
+[*]Boom Body, the Thomas the Tank Engine gun and the Minethrower when a bot has bought one.
+[*]Defibrillators, held for as long as the weapon asks for, and health stations.
+[/list]
+
+[h2]Fights that make sense[/h2]
+[list]
+[*]Traitors no longer open fire the instant a round begins (ttt_bot_attack_delay).
+[*]An unprovoked kill waits too (ttt_bot_rdm_delay).
+[*]Melee bots close to their weapon's real reach instead of swinging at air.
+[*]In the post-round deathmatch, roles that cannot deal damage hide instead of walking into a fight they cannot win.
+[*]A sniper perch is only used by a bot carrying a weapon that can actually use one.
+[/list]
+
+[h2]Fixes and performance[/h2]
+Vision no longer depends on an NPC-only function that reports "cannot see" for every player on a server with
+[b]ai_ignoreplayers[/b] set - on such a server the original build's bots were effectively blind. Also fixed: bots
+freezing at gunshots, "seeing through floors", dead bots making callouts, two C4s planted in the same spot, a
+NULL-entity crash, and defibrillator revives being let go too early. The path-finder was rewritten and the
+per-tick world scans were cached, so a full server of bots costs noticeably less CPU than before.
+
+[h2]Optional addons[/h2]
+Extra behaviour switches on automatically when the matching addon is installed - Super Soda, Fake Soda, Boom
+Body, Thomas the Tank Engine, the Minethrower, and the role addons behind the roles listed above. Nothing is
+required beyond TTT2.
+
+[h1]Credits[/h1]
+Original TTT Bots 2 by thebigsleepjoe. This revamp is unaffiliated with the original and keeps the same
+CC BY-SA 4.0 licence and attribution.

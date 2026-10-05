@@ -29,6 +29,14 @@ local DIST_CLOSE_THRESH = 100   -- close enough, once the short clock has run ou
 local POPULAR_SEEK_RADIUS = 2500
 local POPULAR_CHANCE = 50
 local POPULAR_MAX_RANK = 200 -- do not scan a whole map's worth of nav areas to find one
+--- How many of the ranked popular areas inside reach a bot will choose between.
+---
+--- One answer for every bot is what made them herd: the list is sorted, so the old "first area inside the radius"
+--- was the same nav area for the whole server, and half of all wander destinations came from that one call.
+local POPULAR_CANDIDATES = 6
+--- How close two bots' destinations have to be to count as the same place. Generous on purpose: two bots standing
+--- on one nav area is the thing being fixed, and a shared perch is no better for being 200 units apart.
+local DESTINATION_CLAIM_RADIUS = 400
 
 --- A bot that has not seen anybody for this long counts as out of contact. This is the case the round reports
 --- as broken: with a couple of bots left on a big map, each one keeps picking destinations inside its own
@@ -196,6 +204,51 @@ function Wander.GetRandomNav()
     return table.Random(areas)
 end
 
+--- Whether another bot is already on its way to roughly this position.
+---
+--- The "claim" is another bot's live wander goal rather than a table this file keeps, so it lapses by itself when
+--- that bot picks somewhere else, dies or leaves the server - nothing to clean up, and nothing to leak between
+--- rounds. A goal whose clock has already run out is not a claim: that bot is about to choose again.
+---@param bot Bot
+---@param pos Vector
+---@param within number
+---@return boolean
+function Wander.IsDestinationTaken(bot, pos, within)
+    for _, other in ipairs(TTTBots.Bots) do
+        if other == bot then continue end
+
+        local wander = other.wander
+        if not (wander and wander.targetPos) then continue end
+        if (wander.timeEndFar or 0) < CurTime() then continue end
+        if wander.targetPos:Distance(pos) <= within then return true end
+    end
+
+    return false
+end
+
+--- One destination per bot, where the map allows it.
+---
+--- Every branch that picks a destination reads the same sorted popularity map, so several bots choosing on the
+--- same tick would take the same nav area - the top-ranked one, not by chance but always. This answers with a
+--- candidate nobody else is walking to, and falls back to the whole list when everybody is: following a bot to a
+--- busy area still beats pacing the same room.
+---@param bot Bot
+---@param candidates table<CNavArea>
+---@return CNavArea?
+function Wander.PickUnclaimed(bot, candidates)
+    if #candidates == 0 then return nil end
+
+    local unclaimed = {}
+    for i = 1, #candidates do
+        local area = candidates[i]
+        if not Wander.IsDestinationTaken(bot, area:GetCenter(), DESTINATION_CLAIM_RADIUS) then
+            unclaimed[#unclaimed + 1] = area
+        end
+    end
+
+    return table.Random(#unclaimed > 0 and unclaimed or candidates)
+end
+
 ---Return if the role can see all C4s inherently, or if it must have someone spot it first
 ---@param bot Bot
 ---@return boolean
@@ -206,11 +259,28 @@ function Wander.BotCanSeeAllC4(bot)
     return canPlant
 end
 
+--- A random area in the region the bot is standing in, re-rolled a few times if another bot has claimed it.
+---
+--- "Random in my region" is only half the variety it looks like: the region is the one every bot standing here
+--- shares, so two bots in the same building still drew from the same pool of areas. Returns nil when a few draws
+--- all came up claimed, which sends the caller to the whole-navmesh draw rather than to a crowded corridor.
+---@param bot Bot
+---@return CNavArea?
+function Wander.GetUnclaimedNavInRegion(bot)
+    for _ = 1, 4 do
+        local area = Wander.GetRandomNavInRegion(bot)
+        if not area then return nil end
+        if not Wander.IsDestinationTaken(bot, area:GetCenter(), DESTINATION_CLAIM_RADIUS) then return area end
+    end
+
+    return nil
+end
+
 --- Returns a random nav with preference to the current area
 function Wander.GetAnyRandomNav(bot, level)
     level = level or 0
     -- 80% chance of getting a random nav in the nearest region, 20% chance of getting a random nav from the entire navmesh
-    local area = (math.random(1, 5) <= 4 and Wander.GetRandomNavInRegion(bot)) or Wander.GetRandomNav()
+    local area = (math.random(1, 5) <= 4 and Wander.GetUnclaimedNavInRegion(bot)) or Wander.GetRandomNav()
     if not area then return nil end
 
     if level < 5 then
@@ -298,6 +368,14 @@ function Wander.FindSpotFor(bot)
             spot = Wander.GetSniperSpotNear(bot)
         end
         spot = spot or TTTBots.Spots.GetNearestSpotOfCategory(bot:GetPos(), kindStr)
+
+        -- The nearest perch or hiding place is the same answer for two bots standing together, so the second one
+        -- to ask walks the first one's route to the same seat. Somebody is already there: wander normally instead,
+        -- which is also what a role that is not allowed a spot does.
+        if spot and Wander.IsDestinationTaken(bot, spot, DESTINATION_CLAIM_RADIUS) then
+            return false, nil
+        end
+
         if spot then
             if Wander.Debug then
                 printf("Bot %s wandering to a %s spot", bot:Nick(), kindStr)
@@ -308,9 +386,14 @@ function Wander.FindSpotFor(bot)
     return false, nil
 end
 
---- The most popular nav area near the bot, or nil when there is nothing popular within reach. Popularity is
---- sorted, so the first area inside the radius is the best one there is; the scan is capped because a big map
---- has thousands of areas and this runs when a bot picks a destination, not every tick.
+--- A popular nav area near the bot, or nil when there is nothing popular within reach. The scan is capped because
+--- a big map has thousands of areas and this runs when a bot picks a destination, not every tick.
+---
+--- It answers with one of the busiest few rather than with the single busiest: the list is sorted, so returning
+--- the first area in range returned *the same nav area for every bot on the server*, and with `POPULAR_CHANCE`
+--- sending half of all destinations through here, that one line is what made a quiet server walk to the same
+--- corner in a herd. The ranking is still respected - the candidates are drawn from the top of it - so bots still
+--- drift towards where people go, just not to the same square metre of it.
 ---@param bot Bot
 ---@return CNavArea?
 function Wander.GetPopularAreaNear(bot)
@@ -318,6 +401,7 @@ function Wander.GetPopularAreaNear(bot)
     if #popularNavs == 0 then return nil end
 
     local pos = bot:GetPos()
+    local candidates = {}
     for rank = 1, math.min(#popularNavs, POPULAR_MAX_RANK) do
         local navTbl = popularNavs[rank]
         if not navTbl then break end
@@ -326,10 +410,11 @@ function Wander.GetPopularAreaNear(bot)
         if not nav then continue end
         if pos:Distance(nav:GetCenter()) > POPULAR_SEEK_RADIUS then continue end
 
-        return nav
+        candidates[#candidates + 1] = nav
+        if #candidates >= POPULAR_CANDIDATES then break end
     end
 
-    return nil
+    return Wander.PickUnclaimed(bot, candidates)
 end
 
 --- Whether the bot has gone a while without seeing anybody. Not knowing where anyone is, it is allowed to
@@ -367,7 +452,7 @@ function Wander.GetDistantPopularArea(bot)
         if #candidates >= RELOCATE_SPREAD then break end
     end
 
-    return table.Random(candidates)
+    return Wander.PickUnclaimed(bot, candidates)
 end
 
 function Wander.UpdateWanderGoal(bot)
@@ -386,26 +471,28 @@ function Wander.UpdateWanderGoal(bot)
     local popularNavs = TTTBots.Lib.PopularNavsSorted
     local adhereToPersonality = (isLoner or lovesCrowds) and math.random(1, 5) <= 4
     if adhereToPersonality and #popularNavs > 10 then
-        local topNNavs = {}
-        local bottomNNavs = {}
+        local topNAreas = {}
+        local bottomNAreas = {}
         local N = 4
 
         for i = 1, N do
             if not popularNavs[i] then break end
-            table.insert(topNNavs, popularNavs[i])
+            local nav = navmesh.GetNavAreaByID(popularNavs[i][1])
+            if nav then topNAreas[#topNAreas + 1] = nav end
         end
         for i = #popularNavs - N, #popularNavs do
             if not popularNavs[i] then break end
-            table.insert(bottomNNavs, popularNavs[i])
+            local nav = navmesh.GetNavAreaByID(popularNavs[i][1])
+            if nav then bottomNAreas[#bottomNAreas + 1] = nav end
         end
 
         if lovesCrowds then
-            targetArea = navmesh.GetNavAreaByID(table.Random(topNNavs)[1])
+            targetArea = Wander.PickUnclaimed(bot, topNAreas)
             if Wander.Debug then
                 printf("Bot %s wandering to a popular area", bot:Nick())
             end
         else
-            targetArea = navmesh.GetNavAreaByID(table.Random(bottomNNavs)[1])
+            targetArea = Wander.PickUnclaimed(bot, bottomNAreas)
             if Wander.Debug then
                 printf("Bot %s wandering to an unpopular area", bot:Nick())
             end

@@ -51,9 +51,10 @@ is what cancels the revival), 37 (a NULL attack target reaching the tick's visib
 comment above it claimed that was allowed), 39 (the whole addon asking "can I see that player" with an NPC-shaped
 function that returns false for every player on a server that sets `ai_ignoreplayers`), 40 (three per-tick entity
 scans that a codebase index turned up: two folded behind their own guards or shared, and the third already cached -
-where the honest answer was to leave it alone) and 41 (a second index-led sweep: the wander stare throttled, the
-ankh scans shared, the C4 list shared with one deliberate exception, and one finding retracted for reading its
-caller wrong).
+where the honest answer was to leave it alone), 41 (a second index-led sweep: the wander stare throttled, the ankh
+scans shared, the C4 list shared with one deliberate exception, and one finding retracted for reading its caller
+wrong) and 42 (the whole server walking to the same corner: a sorted popularity list that gave every bot the same
+answer, and the two places that read it from the top).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
@@ -64,7 +65,7 @@ caller wrong).
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Fourteen rules this session paid for, in the order they cost time:**
+**Fifteen rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -158,6 +159,13 @@ caller wrong).
    bot placed *this tick*, which a once-a-second cached C4 list may not contain yet, so it keeps a fresh scan while
    the separation rule reads the cache. Two halves of one lesson - count the call, and check what the answer has to
    be fresh enough for.
+15. **A sorted list read from the top is one answer shared by the whole server.** Section 42: the popularity map is
+   sorted most-popular-first, and three separate call sites took the first entry - `Wander.GetPopularAreaNear`
+   returned the same nav area for every bot, `GetTopNPopularNavs(1)` in the plan coordinator did the same for every
+   bot holding that job, and the loves-crowds/loner picker only ever drew from a four-entry top. Each looked
+   harmless on its own; together they meant a quiet server walked to one corner in a herd. When a shared, sorted
+   ranking feeds a per-actor decision, the top of it is a *constant* rather than a choice - draw from the top few,
+   and ask what the other actors have already taken.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -2616,3 +2624,47 @@ same trap the barrel scan sprang in 40, and the reason the sweep's one rule is "
 **Verification:** glua-check 128 files, 0 issues, 2 notes (unchanged). GluaLint: the eight touched files report
 exactly their previous counts (`sh_botlib.lua` 13, `sh_match.lua` 1, and `breakankh`, `moveankh`, `stealankh`,
 `wander`, `plantbomb` and `meta_defs` 0), so the whole-tree total is still 174 warning lines across 128 files.
+
+---
+
+## 42. The whole server walked to the same corner - a sorted list with one answer for everybody
+
+**Report:** on a quiet server every wandering bot drifts to the same place; they "share a single brain cell".
+
+**Cause - the same mistake in three places.** `TTTBots.Lib.PopularNavsSorted` is the addon's running count of where
+players and bots have actually stood ([`sv_popularnavs.lua`](lua/tttbots2/lib/sv_popularnavs.lua:15)), sorted
+most-popular-first, and three call sites read it from the top:
+
+1. [`Wander.GetPopularAreaNear`](lua/tttbots2/behaviors/wander.lua:316) returned **the first entry inside
+   `POPULAR_SEEK_RADIUS`** - the same nav area for every bot on the map - and with `POPULAR_CHANCE` at 50, half of
+   all wander destinations came from that one line. It is also the fallback in the lost-contact relocation.
+2. [`PlanCoordinator.CalcPopularArea`](lua/tttbots2/lib/sv_plancoordinator.lua:122) asked
+   `GetTopNPopularNavs(1)`, so **every bot holding that job** - and [`TestJob`](lua/tttbots2/lib/sv_plancoordinator.lua:25)
+   allows up to `MaxAssigned` of them - was sent to the identical point.
+3. Nothing else broke the tie: `Wander.GetAnyRandomNav` is random *within the nearest region* (the region every bot
+   standing there shares), and the sniper/hiding pickers answer with the **nearest** spot of the category, which
+   two bots standing together agree on.
+
+**Fix - spread the choice, and let bots know what is already taken.**
+
+- [`Wander.GetPopularAreaNear`](lua/tttbots2/behaviors/wander.lua:316) now gathers up to `POPULAR_CANDIDATES` (6)
+  of the busiest areas inside reach and picks one: the ranking is still respected, so bots still drift towards
+  where people go, just not to the same square metre of it. `GetDistantPopularArea` and the loves-crowds/loner
+  branch pick from their candidate lists the same way.
+- [`Wander.IsDestinationTaken`](lua/tttbots2/behaviors/wander.lua:199) answers "is another bot already on its way
+  to roughly here" (within `DESTINATION_CLAIM_RADIUS`, 400). The claim **is another bot's live wander goal** rather
+  than a table this file keeps, so it lapses by itself when that bot picks somewhere else, dies or leaves -
+  nothing to clean up, nothing to leak between rounds. `GetUnclaimedNavInRegion` re-rolls the region draw against
+  it, and the sniper/hiding pickers decline a spot somebody is already walking to (that bot wanders normally
+  instead, which is what a role not allowed a spot does anyway).
+- [`PlanCoordinator.CalcPopularArea`](lua/tttbots2/lib/sv_plancoordinator.lua:122) and `CalcUnpopularArea` draw
+  from the top `AREA_TARGET_SPREAD` (6) of their rankings rather than from rank 1. No claim filter here: a plan
+  target is a Vector computed once at assignment with nothing of the bot's to compare it against.
+
+**Deliberately left alone:** the nearest-of-category answers themselves (a hiding spot is picked for what it hides,
+and the note on `GetSniperSpotNear` explains why a perch has to be the close one), and
+`TTTBots.Lib.GetRandomPopularNav`, which is already random across the top 8.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: `wander.lua` 0 warnings, and
+`sv_plancoordinator.lua` at its previous 8 - the two "unnecessary parentheses" in that report belong to
+`GetNextJob`'s pre-existing `math.random((a or 15), (b or 60))`, which only shifted line number.
