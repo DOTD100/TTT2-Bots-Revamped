@@ -38,6 +38,13 @@ verified sources and the traps behind every line below; it is not part of the ad
   which is one answer for every bot on the server, so a quiet round sent the whole lobby to a single corner. They
   now choose between the busiest few, and a bot avoids a destination another bot is already walking to (the claim
   is that bot's live goal, so it expires by itself when it picks somewhere else).
+- A bot announcing a KOS now actually registers one, so the rest of the team hears it and their suspicion moves -
+  previously the callout was decorative and the KOS list was never read by anything. Gated by a new
+  `ttt_bot_kos_chance` (50% by default): 0 makes bot callouts flavour text again, 100 makes every announcement
+  real. The existing per-caller `ttt_bot_kos_limit` still applies.
+- Traitors ordered to follow a human no longer all follow the same person. The job allowed the whole team to take
+  it, and with one human traitor they all resolved the same name; each bot now prefers somebody another bot is not
+  already following.
 
 ### Fixed
 

@@ -298,6 +298,28 @@ function PlanCoordinator.CalcRandFriendly(caller)
     return table.Random(allies)
 end
 
+--- Is another bot already shadowing this player?
+---
+--- The claim is another bot's live job rather than a table kept here, so it lapses by itself when that job ends
+--- or the bot dies - nothing to clean up. It matters because `RAND_FRIENDLY_HUMAN` on a server with a single
+--- human traitor - the normal case - resolved to that one person for every bot while the job's `MaxAssigned` of
+--- 99 let the whole team take it, so the entire team announced and then followed the same player in single file.
+---@param caller Player
+---@param ply Player
+---@return boolean
+local function isBeingFollowed(caller, ply)
+    for _, bot in ipairs(TTTBots.Bots) do
+        if bot == caller then continue end
+        if not TTTBots.Lib.IsPlayerAlive(bot) then continue end
+
+        local job = bot.Job
+        if not (job and job.Action == ACTIONS.FOLLOW) then continue end
+        if job.TargetObj == ply then return true end
+    end
+
+    return false
+end
+
 --- A Target Hashtable function to calculate a target for a job.
 function PlanCoordinator.CalcRandFriendlyHuman(caller)
     local alliesHuman = TTTBots.Lib.FilterTable(TTTBots.Match.AlivePlayers, function(ply)
@@ -305,7 +327,13 @@ function PlanCoordinator.CalcRandFriendlyHuman(caller)
     end)
     if #alliesHuman == 0 then return PlanCoordinator.CalcRandFriendly(caller) end
 
-    return table.Random(alliesHuman)
+    -- Somebody nobody is already shadowing, when there is one. Falling back to the full list keeps the job
+    -- working on a server with one human traitor: the follower is then a duplicate rather than a no-op.
+    local unshadowed = TTTBots.Lib.FilterTable(alliesHuman, function(ply)
+        return not isBeingFollowed(caller, ply)
+    end)
+
+    return table.Random(#unshadowed > 0 and unshadowed or alliesHuman)
 end
 
 --- A Target Hashtable function to calculate a target for a job.
@@ -314,7 +342,11 @@ function PlanCoordinator.CalcRandPolice(caller)
         function(ply) return ply:GetRoleStringRaw() == "detective" end)
     if #police == 0 then return nil end
 
-    return table.Random(police)
+    local unshadowed = TTTBots.Lib.FilterTable(police, function(ply)
+        return not isBeingFollowed(caller, ply)
+    end)
+
+    return table.Random(#unshadowed > 0 and unshadowed or police)
 end
 
 local P = PlanCoordinator

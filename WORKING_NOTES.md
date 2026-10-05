@@ -53,11 +53,13 @@ function that returns false for every player on a server that sets `ai_ignorepla
 scans that a codebase index turned up: two folded behind their own guards or shared, and the third already cached -
 where the honest answer was to leave it alone), 41 (a second index-led sweep: the wander stare throttled, the ankh
 scans shared, the C4 list shared with one deliberate exception, and one finding retracted for reading its caller
-wrong) and 42 (the whole server walking to the same corner: a sorted popularity list that gave every bot the same
-answer, and the two places that read it from the top).
+wrong), 42 (the whole server walking to the same corner: a sorted popularity list that gave every bot the same
+answer, and the two places that read it from the top) and 43 (a KOS callout that registered nothing, and the whole
+traitor team following one player: the visible half of a feature and the working half being two different
+functions).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
-`place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33).
+`place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33), `kos_chance` (50, 43).
 
 **New files:** `behaviors/fusecharge.lua`, `behaviors/placefakesoda.lua`, `behaviors/boombody.lua`,
 `behaviors/thomas.lua`, `behaviors/minethrower.lua`, `behaviors/curseswap.lua` + `roles/cursed.lua` (29),
@@ -65,7 +67,7 @@ answer, and the two places that read it from the top).
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Fifteen rules this session paid for, in the order they cost time:**
+**Sixteen rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -166,6 +168,12 @@ answer, and the two places that read it from the top).
    harmless on its own; together they meant a quiet server walked to one corner in a herd. When a shared, sorted
    ranking feeds a per-actor decision, the top of it is a *constant* rather than a choice - draw from the top few,
    and ask what the other actors have already taken.
+16. **A message and the action behind it are two code paths, and only one of them may exist.** Section 43: bots
+   shouted "KOS on X!" for a whole round while not one KOS was registered - the line came from
+   `BotMorality:AnnounceIfThreshold`, which fires on suspicion alone, while the real call sat two hundred lines away
+   in `Match.CallKOS` and was reachable only by *being shot*. `Match.KOSList` was written, cleared each round, and
+   read by nothing at all. When a bot "says it but does not do it", check whether the half you can see and the half
+   that works are the same function before looking for a broken condition.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -2668,3 +2676,47 @@ and the note on `GetSniperSpotNear` explains why a perch has to be the close one
 **Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: `wander.lua` 0 warnings, and
 `sv_plancoordinator.lua` at its previous 8 - the two "unnecessary parentheses" in that report belong to
 `GetNextJob`'s pre-existing `math.random((a or 15), (b or 60))`, which only shifted line number.
+
+---
+
+## 43. A KOS callout that registered nothing, and a whole team following one player
+
+**Reported:** bots announce KOS and nothing follows it; and traitors "say I'm going to follow <player> twice".
+
+**Two defects with nothing in common except looking like chatter problems.**
+
+### The KOS shout was decorative
+
+[`BotMorality:AnnounceIfThreshold`](lua/tttbots2/components/sv_morality.lua:165) fires
+`chatter:On("CallKOS", ...)` the moment a bot's suspicion crosses `Thresholds.KOS` - and that was **all** it did.
+The real call, [`Match.CallKOS`](lua/tttbots2/lib/sh_match.lua:149), was reachable from exactly two places: being
+shot ([`sv_morality.lua:450`](lua/tttbots2/components/sv_morality.lua:450)) and a *player's* KOS chat command
+([`sh_match.lua:445`](lua/tttbots2/lib/sh_match.lua:445)). So a bot could announce a KOS all round and never
+register one, no other bot ever heard it, and [`Match.KOSList`](lua/tttbots2/lib/sh_match.lua:43) - the documented
+"list of active KOS calls" - was written at 155, cleared at 212 and **read by no code at all**.
+
+**Fix:** announcing is now the call, behind a new `ttt_bot_kos_chance` (default 50). A merely suspicious bot should
+not be a free radar for its whole team, and the chance also damps the chain: registering shifts every bot's
+suspicion of the target, and `ChangeSuspicion` calls `AnnounceIfThreshold` synchronously, so a bot pushed over the
+same threshold can pass the call on - bounded by `ttt_bot_kos_limit` (2 per caller per round) and halved at each
+hop. `CallKOS` keeps its own guards (round active, police-looking roles refused, the per-caller cap).
+
+### Every traitor followed the same human
+
+Not a double-fire: [`botChatterWhenJobStart`](lua/tttbots2/behaviors/followplan.lua:160) already guards with
+`job.HasChatted`. The job itself is the problem. The "everyone idle should follow any human traitors" preset
+([`sv_planpresets.lua:157-169`](lua/tttbots2/data/sv_planpresets.lua:157)) is `MaxAssigned = 99` with
+`Target = TARGETS.RAND_FRIENDLY_HUMAN`, and [`CalcRandFriendlyHuman`](lua/tttbots2/lib/sv_plancoordinator.lua:302)
+is `table.Random` over the living ally *humans* - so on a server with one human traitor, which is the normal case,
+every bot resolved the same name and the team announced and then shadowed the same player in single file. The same
+defect class as section 42: one shared job whose target resolves to a constant.
+
+**Fix:** new `PlanCoordinator.isBeingFollowed(caller, ply)` reads **other bots' live jobs** (`bot.Job.TargetObj`)
+rather than keeping a table, so the claim lapses by itself when a job ends or a bot dies.
+[`CalcRandFriendlyHuman`](lua/tttbots2/lib/sv_plancoordinator.lua:302) and
+[`CalcRandPolice`](lua/tttbots2/lib/sv_plancoordinator.lua:312) now prefer a player nobody is shadowing, falling
+back to the full list so the job still works when there is only one candidate.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: `sv_morality.lua` 6, `sv_plancoordinator.lua`
+8 and `sh_cvars.lua` 4 - each exactly its previous count, so none of the three edits added a warning. New cvar:
+`ttt_bot_kos_chance` (50).

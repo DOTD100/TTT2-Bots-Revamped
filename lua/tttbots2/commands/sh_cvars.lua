@@ -74,6 +74,8 @@ bot_sh_cvar("difficulty", "3",
     "A difficulty integer between 1-5; higher = harder. This affects trait selection and aim speed, reaction speed, and KOS callout chances.")
 bot_sh_cvar("kos_limit", "2",
     "The upper bound of KOS calls an individual, bot or player, can make per round. Before the bots ignore them, at least. Used to deter trolls.")
+bot_sh_cvar("kos_chance", "50",
+    "The chance, as a percentage, that a bot which announces a KOS actually registers one. A registered KOS is heard by every other bot and shifts their suspicion, so 0 makes bot callouts purely decorative and 100 makes every announcement real. Whatever this is set to, one caller is still capped by ttt_bot_kos_limit calls per round.")
 bot_sh_cvar("reaction_speed", "0.8",
     "The base time, in seconds, a bot will take before attacking a newly assigned target. Higher means easier gameplay. THIS INVERSELY SCALES WITH DIFFICULTY AUTOMATICALLY.")
 bot_sh_cvar("plant_c4", "1",

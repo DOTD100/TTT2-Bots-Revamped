@@ -179,6 +179,17 @@ function BotMorality:AnnounceIfThreshold(target)
 
     if sus >= KOSThresh and not uncallable then
         chatter:On("CallKOS", { player = target:Nick(), playerEnt = target })
+
+        -- The shout used to be the whole of it: a bot announced a KOS and registered nothing, so no other bot
+        -- ever heard it and `Match.KOSList` stayed empty all round. Announcing is now the call, at
+        -- `ttt_bot_kos_chance` because a merely suspicious bot should not be a free radar for its whole team.
+        -- `CallKOS` runs its own checks - round active, the target's role, and `ttt_bot_kos_limit` calls per
+        -- caller per round - which is also what bounds the chain: registering shifts every bot's suspicion of
+        -- the target, and a bot that crosses this same threshold as a result can pass the call on.
+        if math.random(1, 100) <= lib.GetConVarInt("kos_chance") then
+            TTTBots.Match.CallKOS(self.bot, target)
+        end
+
         -- self.bot:Say("I think " .. target:Nick() .. " is evil!")
     elseif sus >= SusThresh then
         -- self.bot:Say("I think " .. target:Nick() .. " is suspicious!")
