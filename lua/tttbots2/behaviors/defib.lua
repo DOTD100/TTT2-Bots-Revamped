@@ -7,7 +7,14 @@ local lib = TTTBots.Lib
 local Defib = TTTBots.Behaviors.Defib
 Defib.Name = "Defib"
 Defib.Description = "Use the defibrillator on a corpse."
-Defib.Interruptible = true
+--- Deliberately *not* interruptible, which is the fix for "the bot starts a revive and then walks off it".
+---
+--- `RunTree` only keeps a running behaviour whose `Interruptible` is false: an interruptible one is re-evaluated
+--- every tick, so anything earlier in the tree that validates preempts it - and a preemption calls `OnEnd`, which
+--- releases the trigger, which is exactly what cancels the weapon's timed revival. Rather than depend on the tree,
+--- this behaviour now owns its own abort conditions: it yields to a real fight itself (see `OnRunning`), and it
+--- gives up on its own deadline.
+Defib.Interruptible = false
 --- Every class we are willing to treat as a defibrillator. weapon_ttt_defibrillator is the standalone
 --- "[TTT2] Defibrillator" weapon the Detective's shop and the Doctor role hand out; the Mesmerist's own
 --- defib is weapon_ttt_mesdefi, which is used the same way - held down with the eye trace on a corpse
@@ -18,6 +25,13 @@ Defib.WeaponClasses = { "weapon_ttt_defibrillator", "weapon_ttt_mesdefi" }
 --- have to stand this close before we take it out. The weapon itself traces 100 units, but the bot
 --- crouches over the body, and a little breathing room keeps the trace from sliding off it.
 Defib.DefibReach = 70
+
+--- How long the whole attempt may take - the walk to the body plus the hold.
+---
+--- With `Interruptible = false` the tree will not take the bot away from this, so the attempt needs a deadline of
+--- its own: a body behind a path that keeps failing, or one the bot cannot reach, would otherwise hold the
+--- behaviour for the rest of the round.
+local DEFIB_ATTEMPT_BUDGET = 30
 
 --- TTT2's defibrillator refuses corpses that were killed with a headshot unless this is enabled.
 local REVIVE_BRAINDEAD_CVAR = "ttt_defibrillator_revive_braindead"
@@ -128,6 +142,10 @@ function Defib.GetCorpse(bot, allyOnly)
         local deadply = player.GetBySteamID64(sid64)
         if not IsValid(deadply) then continue end
         if deadply == bot then continue end
+        -- Somebody else already got them up, or a revive resolved between the ragdoll appearing and this scan.
+        -- A body whose player is breathing is not a body: the weapon refuses it and the bot would stand over it
+        -- holding a trigger until the hold budget ran out.
+        if deadply:Alive() then continue end
         if allyOnly and not TTTBots.Roles.IsAllies(bot, deadply) then continue end
         if Defib.RevivesInnocentSide(bot) and not Defib.IsInnocentSide(deadply) then continue end
         if (deadply.reviveCooldown or 0) > cTime then continue end
@@ -249,7 +267,7 @@ end
 
 function Defib.OnStart(bot)
     bot.defibTarget, bot.defibRag = Defib.GetCorpse(bot, not Defib.RevivesAnyone(bot))
-
+    bot.defibDeadline = CurTime() + DEFIB_ATTEMPT_BUDGET
 
     return STATUS.RUNNING
 end
@@ -291,6 +309,20 @@ function Defib.OnRunning(bot)
 
     -- The weapon resolved the attempt and revived them.
     if target:Alive() then return STATUS.SUCCESS end
+
+    -- Yield to a real fight. The tree will not do it for us any more, and a bot that stands over a body while
+    -- somebody shoots it dies for nothing. Leaving here is a decision rather than an interruption, so the weapon
+    -- cancelling the revival is the right outcome - and the body gets its cooldown so the bot does not walk
+    -- straight back to it.
+    if bot.attackTarget then
+        Defib.CooldownCorpse(target)
+        return STATUS.FAILURE
+    end
+
+    if CurTime() > (bot.defibDeadline or 0) then
+        Defib.CooldownCorpse(target)
+        return STATUS.FAILURE
+    end
 
     local holding = bot.defibStartTime ~= nil
 

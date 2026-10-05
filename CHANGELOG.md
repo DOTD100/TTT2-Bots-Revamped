@@ -45,6 +45,14 @@ verified sources and the traps behind every line below; it is not part of the ad
 - Traitors ordered to follow a human no longer all follow the same person. The job allowed the whole team to take
   it, and with one human traitor they all resolved the same name; each bot now prefers somebody another bot is not
   already following.
+- Defibrillator revives are no longer abandoned half way through: the behaviour was interruptible, so any
+  higher-priority node took the trigger away from the bot - and releasing the trigger is what cancels the weapon's
+  revival. It now owns its own attempt, yielding only to a real fight or to its own 30-second deadline.
+- Bots no longer spend a charge on a body whose owner is already up, and no longer pile onto one gunshot: a noise
+  two other bots are already answering is left to them, and each investigator walks to its own point around the
+  noise instead of onto it.
+- Wandering bots avoid crowds as well as each other's chosen destinations, so a round no longer ends with every
+  idle bot drifting into the same group.
 
 ### Fixed
 

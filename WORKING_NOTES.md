@@ -54,9 +54,10 @@ scans that a codebase index turned up: two folded behind their own guards or sha
 where the honest answer was to leave it alone), 41 (a second index-led sweep: the wander stare throttled, the ankh
 scans shared, the C4 list shared with one deliberate exception, and one finding retracted for reading its caller
 wrong), 42 (the whole server walking to the same corner: a sorted popularity list that gave every bot the same
-answer, and the two places that read it from the top) and 43 (a KOS callout that registered nothing, and the whole
+answer, and the two places that read it from the top), 43 (a KOS callout that registered nothing, and the whole
 traitor team following one player: the visible half of a feature and the working half being two different
-functions).
+functions) and 44 (a defibrillator whose own behaviour took the trigger back off it, bodies that could not come
+back, and every bot answering the same gunshot).
 
 **New cvars**, all `ttt_bot_` prefixed and all defaulting to something safe: `throw_nades`, `use_soda`,
 `place_fake_soda`, `use_boom_body`, `use_thomas`, `use_minethrower`, `rdm_delay` (30), `use_ankh` (33), `kos_chance` (50, 43).
@@ -67,7 +68,7 @@ functions).
 `roles/pharaoh.lua`, `roles/graverobber.lua` (33), `behaviors/evade.lua` (34), `roles/revenant.lua` (32), and
 `tools/glua-check/` (tooling, not shipped).
 
-**Sixteen rules this session paid for, in the order they cost time:**
+**Seventeen rules this session paid for, in the order they cost time:**
 
 1. **A bot's direct call bypasses the addon's own hook.** `CORPSE.ShowSearch` sits *below* `TTTCanSearchCorpse`,
    and two roles hang their whole mechanic off that hook: the Blocker (refuses searches) and the Amnesiac (the
@@ -174,6 +175,13 @@ functions).
    in `Match.CallKOS` and was reachable only by *being shot*. `Match.KOSList` was written, cleared each round, and
    read by nothing at all. When a bot "says it but does not do it", check whether the half you can see and the half
    that works are the same function before looking for a broken condition.
+17. **A behaviour that has to *hold* something must not be interruptible - it has to own its own exits.** Section
+   44: setting the trigger down is what cancels a defibrillator's revival, and an `Interruptible` behaviour is
+   re-evaluated every tick, so whatever earlier node validated took the trigger out of the bot's hands and
+   `OnEnd` released it. `Interruptible = false` reads like a scheduling preference; it is actually about who owns
+   the bot's hands for the duration. When a behaviour's whole mechanic is "keep doing X until it works", make it
+   non-interruptible and give it the abort conditions it needs - here a fight to yield to and a deadline for the
+   whole attempt - because the tree will find exits for it otherwise.
 
 **The fairness line drawn this session, so it is not re-litigated by accident:** bots are not told things a
 player could not know. They do not know whether a can is a Fake Soda, they do not know a corpse is a Boom Body
@@ -2720,3 +2728,53 @@ back to the full list so the job still works when there is only one candidate.
 **Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: `sv_morality.lua` 6, `sv_plancoordinator.lua`
 8 and `sh_cvars.lua` 4 - each exactly its previous count, so none of the three edits added a warning. New cvar:
 `ttt_bot_kos_chance` (50).
+
+---
+
+## 44. The defib took its own trigger back, and everything answered the same gunshot
+
+**Reported:** bots start a defibrillator revive and do not finish it; they try to revive somebody who cannot come
+back; and they still gather in one place when investigating a noise or wandering.
+
+### The defib abandoned its own attempt
+
+`Defib.Interruptible` was `true`, and in this tree that is the difference between owning a hold and losing it:
+[`RunTree`](lua/tttbots2/lib/sv_tree.lua:245) only keeps calling `OnRunning` for a behaviour that is *not*
+interruptible. An interruptible one is re-evaluated every tick, so whatever earlier node validates preempts it -
+and the preemption runs `OnEnd`, which calls `StopReviving` and **releases the trigger**. Releasing is exactly what
+the weapon's own `Think` reads as "cancelled", so the bot was killing its own revival. Same failure as section 36
+from the other end: that one was the hold being too *short*, this one is the hold being taken away.
+
+**Fix:** `Interruptible = false`, so the behaviour owns the attempt - which means it also has to own the exits that
+the tree used to provide. It now yields to a real fight itself (`bot.attackTarget`, rather than standing over a
+body while being shot) and carries a `DEFIB_ATTEMPT_BUDGET` (30 s) covering the walk *and* the hold, because a
+non-interruptible walk would otherwise never end. Both exits cool the corpse down, so the bot does not walk
+straight back to it.
+
+### Bodies that cannot come back
+
+`Defib.GetCorpse` accepted any corpse whose player resolved, without asking whether that player was still dead -
+so a body whose owner had already been revived by somebody else was a valid target, the weapon refused it, and the
+bot stood over it holding the trigger until the hold budget ran out. `deadply:Alive()` is now part of the filter.
+The headshot half is already handled by `IsRevivableBody` through `CORPSE.WasHeadshot` plus
+`ttt_defibrillator_revive_braindead`; if a server still sees bots hovering over a body that will not rise, that
+cvar is the first thing to check, because the rule has to agree with what the third-party defibrillator enforces.
+
+### Everyone answered the same gunshot
+
+[`InvestigateNoise`](lua/tttbots2/behaviors/investigatenoise.lua:101) commits a bot to the *closest* remembered
+noise and walks it to that exact coordinate - and a fresh gunshot deliberately **skips the dice roll**, so every
+bot that heard the shot went to the same point. Two changes: `IsCrowded` declines a noise that `MAX_INVESTIGATORS`
+(2) other bots are already walking to (read from their live commitments, so there is nothing to clean up), and each
+committer walks to its own `GetApproachPos` - a point on a ring around the noise - while still looking at where
+the shot came from.
+
+### Wandering: avoiding a destination is not avoiding a crowd
+
+Section 42 taught bots to avoid each other's *destinations*, which does nothing about a group that is already
+standing somewhere: every bot avoids every other bot's goal and they all pick somewhere next to the crowd they
+are standing in. [`Wander.PickUnclaimed`](lua/tttbots2/behaviors/wander.lua:236) now makes two passes - unclaimed
+first, then *roomy* (no other bot within `CROWDED_RADIUS`, 700) - each falling back to the set before it.
+
+**Verification:** glua-check 128 files, 0 issues, 2 notes. GluaLint: `defib.lua`, `wander.lua` and
+`investigatenoise.lua` all report 0 warnings.

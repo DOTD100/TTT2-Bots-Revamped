@@ -37,6 +37,10 @@ local POPULAR_CANDIDATES = 6
 --- How close two bots' destinations have to be to count as the same place. Generous on purpose: two bots standing
 --- on one nav area is the thing being fixed, and a shared perch is no better for being 200 units apart.
 local DESTINATION_CLAIM_RADIUS = 400
+--- How close another bot has to be standing for a destination to count as taken already. Wider than the claim
+--- above on purpose: two bots heading to one area was the first half of the problem, and two bots *standing*
+--- together picking somewhere new is the other half - each avoids the other's goal, both go to the crowd.
+local CROWDED_RADIUS = 700
 
 --- A bot that has not seen anybody for this long counts as out of contact. This is the case the round reports
 --- as broken: with a couple of bots left on a big map, each one keeps picking destinations inside its own
@@ -226,12 +230,32 @@ function Wander.IsDestinationTaken(bot, pos, within)
     return false
 end
 
+--- Is another bot already standing near this area?
+---
+--- The other half of "they keep gathering in one spot": avoiding the *destinations* other bots have chosen still
+--- walks a bot into the group that is already there, because the group is standing somewhere, not going
+--- somewhere. Reads where bots are, so it needs nothing to be cleaned up and follows them as they move.
+---@param bot Bot
+---@param area CNavArea
+---@return boolean
+function Wander.IsCrowdedByBots(bot, area)
+    local centre = area:GetCenter()
+
+    for _, other in ipairs(TTTBots.Bots) do
+        if other == bot then continue end
+        if not lib.IsPlayerAlive(other) then continue end
+        if other:GetPos():Distance(centre) <= CROWDED_RADIUS then return true end
+    end
+
+    return false
+end
+
 --- One destination per bot, where the map allows it.
 ---
 --- Every branch that picks a destination reads the same sorted popularity map, so several bots choosing on the
---- same tick would take the same nav area - the top-ranked one, not by chance but always. This answers with a
---- candidate nobody else is walking to, and falls back to the whole list when everybody is: following a bot to a
---- busy area still beats pacing the same room.
+--- same tick would take the same nav area - the top-ranked one, not by chance but always. Two passes: prefer a
+--- candidate nobody else is walking to, then prefer one nobody is standing at. Each pass falls back to the set
+--- before it, because following somebody to a busy area still beats pacing the same room.
 ---@param bot Bot
 ---@param candidates table<CNavArea>
 ---@return CNavArea?
@@ -246,7 +270,14 @@ function Wander.PickUnclaimed(bot, candidates)
         end
     end
 
-    return table.Random(#unclaimed > 0 and unclaimed or candidates)
+    local pool = (#unclaimed > 0) and unclaimed or candidates
+
+    local roomy = {}
+    for i = 1, #pool do
+        if not Wander.IsCrowdedByBots(bot, pool[i]) then roomy[#roomy + 1] = pool[i] end
+    end
+
+    return table.Random(#roomy > 0 and roomy or pool)
 end
 
 ---Return if the role can see all C4s inherently, or if it must have someone spot it first

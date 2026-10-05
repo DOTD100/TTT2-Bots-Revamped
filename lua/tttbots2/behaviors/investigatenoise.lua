@@ -30,6 +30,18 @@ local GUNSHOT_URGENT_WINDOW = 2
 --- across a gap, or behind a path that keeps failing - must not hold the behaviour for the rest of the round.
 local INVESTIGATE_TIMEOUT = 20
 
+--- How many other bots may already be committed to one noise before this bot declines it.
+---
+--- A fresh gunshot deliberately skips the dice roll below, which is right - something is happening now - but it
+--- also means *every* bot that heard it walks to the same coordinate, and that pile-up is the "they gather in one
+--- spot when investigating noise" report. Two is a pair going to look; three is a firing squad.
+local MAX_INVESTIGATORS = 2
+--- How close two bots' committed noises have to be to count as the same one when doing that counting.
+local SAME_NOISE_RADIUS = 400
+--- How far out from the noise the approach points sit, so two bots answering the same shot arrive side by side
+--- rather than inside one another.
+local APPROACH_RING = 160
+
 ---@class Bot
 ---@field investigateNoiseTimer number The last time the bot investigated a noise
 ---@field investigateNoiseTarget table? The noise this bot is walking to, if any
@@ -74,6 +86,46 @@ function InvestigateNoise.IsUrgentNoise(sound)
     return sound.sound == "Gunshot" and (CurTime() - sound.time) <= GUNSHOT_URGENT_WINDOW
 end
 
+--- Are enough other bots already walking to this noise that we should leave it to them?
+---
+--- Read from the other bots' live commitments rather than a table kept here, so nothing has to be cleaned up when
+--- a bot dies or gives up - the claim *is* their goal.
+---@param bot Bot
+---@param pos Vector
+---@return boolean
+function InvestigateNoise.IsCrowded(bot, pos)
+    local count = 0
+
+    for _, other in ipairs(TTTBots.Bots) do
+        if other == bot then continue end
+        if not lib.IsPlayerAlive(other) then continue end
+
+        local noise = other.investigateNoiseTarget
+        if not noise then continue end
+        if noise.pos:Distance(pos) <= SAME_NOISE_RADIUS then count = count + 1 end
+    end
+
+    return count >= MAX_INVESTIGATORS
+end
+
+--- Where this bot will actually stand: a point on a ring around the noise, not the noise itself.
+---@param pos Vector
+---@return Vector
+function InvestigateNoise.GetApproachPos(pos)
+    local angle = math.random() * math.pi * 2
+    local target = pos + Vector(math.cos(angle), math.sin(angle), 0) * APPROACH_RING
+
+    -- A ring point can land inside geometry or off the navmesh entirely. Keep it only if the navmesh agrees it is
+    -- somewhere near the noise; otherwise walk to the noise itself and let the locomotor sort the last few units.
+    local nav = navmesh.GetNearestNavArea(target)
+    if not nav then return pos end
+
+    local point = nav:GetCenter()
+    if point:Distance(pos) > (APPROACH_RING * 4) then return pos end
+
+    return point
+end
+
 --- The noise this bot has committed to, or nil.
 ---
 --- Committing is what stops several shots from taking turns as "the closest noise" and flipping the goal between
@@ -115,23 +167,32 @@ function InvestigateNoise.OnRunning(bot)
             return STATUS.FAILURE
         end
 
+        -- Urgent or not, only a couple of bots answer any one noise: a gunshot skips the dice roll, so without
+        -- this the whole server turns up at the same wall.
+        if InvestigateNoise.IsCrowded(bot, closest.pos) then return STATUS.FAILURE end
+
         noise = {
             pos = closest.pos,
             sound = closest.sound,
             heardAt = closest.time,
             committedAt = CurTime(),
+            approachPos = InvestigateNoise.GetApproachPos(closest.pos),
         }
         bot.investigateNoiseTarget = noise
     end
 
+    -- Walk to our own point on the ring, but keep looking at where the noise came from: the whole point is to
+    -- arrive spread out and then look at the thing that made it.
+    local arrivePos = noise.approachPos or noise.pos
+
     -- Arrived, and there is nothing here to see: the investigation is over.
-    if bot:GetPos():Distance(noise.pos) < INVESTIGATE_ARRIVE_DIST then
+    if bot:GetPos():Distance(arrivePos) < INVESTIGATE_ARRIVE_DIST then
         bot.investigateNoiseTarget = nil
         return STATUS.SUCCESS
     end
 
     loco:LookAt(noise.pos + Vector(0, 0, 72))
-    loco:SetGoal(noise.pos)
+    loco:SetGoal(arrivePos)
     return STATUS.RUNNING
 end
 
